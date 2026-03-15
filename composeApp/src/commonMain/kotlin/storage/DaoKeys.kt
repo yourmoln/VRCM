@@ -77,4 +77,9 @@ object DaoKeys{
         const val FRIEND_KEY = "${PREFIX}.favorite.local.friend"
         const val AVATAR_KEY = "${PREFIX}.favorite.local.avatar"
     }
+
+    object FriendNetwork {
+        const val NAME = "${PREFIX}.friend.network"
+        const val KEY_PREFIX = "${PREFIX}.friend.network.cache"
+    }
 }

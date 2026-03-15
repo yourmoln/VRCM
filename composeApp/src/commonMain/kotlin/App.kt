@@ -25,6 +25,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.auth.AuthAnimeScreen
 import io.github.vrcmteam.vrcm.presentation.screens.auth.StartupAnimeScreen
 import io.github.vrcmteam.vrcm.presentation.screens.auth.VersionDialog
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreen
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
@@ -48,9 +49,9 @@ fun App() {
                         navigator = it,
                         modifier = Modifier.slideBack(),
                         transitionSpec = { selectTransition(it) }
-                    ) {
-                        SharedTransitionDialog(key = it.key) {
-                            it.Content()
+                    ) { screen ->
+                        SharedTransitionDialog(key = screen.key) {
+                            screen.Content()
                         }
                     }
                 }
@@ -63,10 +64,10 @@ fun AnimatedContentTransitionScope<Screen>.selectTransition(navigator: Navigator
     when {
         isTransitioningOn<HomeScreen, UserProfileScreen>() -> slideScreenTransition(navigator)
         isTransitioningOn<HomeScreen, WorldProfileScreen>() -> slideScreenTransition(navigator)
+        isTransitioningOn<HomeScreen, GroupProfileScreen>() -> slideScreenTransition(navigator)
         isTransitioningOn<UserProfileScreen, GalleryScreen>() -> slideScreenTransition(navigator, SlideOrientation.Horizontal)
         isTransitioningOn<WorldProfileScreen, UserProfileScreen>() -> slideScreenTransition(navigator, SlideOrientation.Horizontal)
         isTransitioningFromTo<HomeScreen, AuthAnimeScreen>() -> HomeToAuthAnimeTransition
         isTransitioningFromTo<AuthAnimeScreen, HomeScreen>() -> AuthAnimeToHomeTransition
         else -> ContentTransform(EnterTransition.None, ExitTransition.None)
     }
-

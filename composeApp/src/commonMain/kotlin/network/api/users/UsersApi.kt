@@ -2,6 +2,8 @@ package io.github.vrcmteam.vrcm.network.api.users
 
 import io.github.vrcmteam.vrcm.network.api.attributes.USERS_API_PREFIX
 import io.github.vrcmteam.vrcm.network.api.users.data.SearchUserData
+import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
+import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
 import io.ktor.client.*
@@ -45,5 +47,18 @@ class UsersApi(private val client: HttpClient) {
         setBody(mapOf("tags" to tags))
         contentType(ContentType.Application.Json)
     }.checkSuccess<CurrentUpdateUserData>()
+
+    suspend fun getUserGroups(userId: String): List<LimitedUserGroup> =
+        client.get("$USERS_API_PREFIX/$userId/groups").checkSuccess()
+
+    suspend fun getMutualFriends(
+        userId: String,
+        n: Int = 100,
+        offset: Int = 0,
+    ): List<MutualFriendData> =
+        client.get("$USERS_API_PREFIX/$userId/mutuals/friends") {
+            parameter("n", n)
+            parameter("offset", offset)
+        }.checkSuccess()
 
 }

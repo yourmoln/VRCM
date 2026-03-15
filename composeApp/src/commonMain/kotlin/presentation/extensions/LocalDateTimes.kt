@@ -8,10 +8,10 @@ val LocalDateTime.ignoredFormat: String
         LocalDateTime.Format {
             val nowTime = Clock.System.now().toLocalDateTime(TimeZone.currentSystemDefault())
             if (nowTime.year != this@ignoredFormat.year) {
-                year(); char('/')
+                year(); char('-')
             }
             if (nowTime.month != this@ignoredFormat.month || nowTime.dayOfMonth != this@ignoredFormat.dayOfMonth) {
-                monthNumber(); char('/'); dayOfMonth(); char(' ')
+                monthNumber(); char('-'); dayOfMonth(); char(' ')
             }
             hour(); char(':'); minute()
         })

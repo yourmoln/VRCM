@@ -24,6 +24,8 @@ import io.github.vrcmteam.vrcm.network.api.invite.InviteApi
 import io.github.vrcmteam.vrcm.presentation.extensions.currentNavigator
 import io.github.vrcmteam.vrcm.presentation.extensions.glideBack
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
@@ -155,12 +157,20 @@ class LocationDialog(
                                     style = MaterialTheme.typography.titleSmall,
                                 )
                                 Icon(modifier = Modifier.size(16.dp), imageVector = owner.iconVector, contentDescription = "OwnerIcon")
-                                // TODO: Group详情页跳转
                                 Text(
-                                    modifier = if (owner.type == BlueprintType.User)
-                                        Modifier.clickable { onClickUserIcon(UserProfileVo(owner.id)) }
+                                    modifier = if (owner.type == BlueprintType.User || owner.type == BlueprintType.Group)
+                                        Modifier.clickable {
+                                            if (owner.type == BlueprintType.User) {
+                                                onClickUserIcon(UserProfileVo(owner.id))
+                                            } else {
+                                                currentNavigator push GroupProfileScreen(
+                                                    groupProfileVo = GroupProfileVo(groupId = owner.id, name = owner.displayName),
+                                                    sharedSuffixKey = sharedSuffixKey
+                                                )
+                                            }
+                                        }
                                     else Modifier,
-                                    textDecoration = if (owner.type == BlueprintType.User) TextDecoration.Underline else null,
+                                    textDecoration = if (owner.type == BlueprintType.User || owner.type == BlueprintType.Group) TextDecoration.Underline else null,
                                     text = owner.displayName,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.outline,

@@ -1,0 +1,613 @@
+package io.github.vrcmteam.vrcm.presentation.screens.user
+
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material3.CenterAlignedTopAppBar
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.rememberModalBottomSheetState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.dp
+import cafe.adriel.voyager.core.screen.Screen
+import cafe.adriel.voyager.koin.koinScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
+import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
+import io.github.vrcmteam.vrcm.presentation.compoments.ABottomSheet
+import io.github.vrcmteam.vrcm.presentation.compoments.UserStateIcon
+import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
+import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
+import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
+import kotlinx.datetime.Instant
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.toLocalDateTime
+import kotlin.math.PI
+import kotlin.math.cos
+import kotlin.math.min
+import kotlin.math.roundToInt
+import kotlin.math.sin
+import kotlin.math.sqrt
+
+object FriendNetworkScreen : Screen {
+
+    @OptIn(ExperimentalMaterial3Api::class)
+    @Composable
+    override fun Content() {
+        val navigator = LocalNavigator.currentOrThrow
+        val model: FriendNetworkScreenModel = koinScreenModel()
+        val state = model.uiState
+        var selectedId by remember { mutableStateOf<String?>(null) }
+        var highlightId by remember { mutableStateOf<String?>(null) }
+        var showSheet by remember { mutableStateOf(false) }
+        val sheetState = rememberModalBottomSheetState()
+
+        LaunchedEffect(Unit) {
+            model.loadCache()
+        }
+
+        val nodeMap = remember(state.nodes) { state.nodes.associateBy { it.id } }
+        val selectedNode = selectedId?.let { nodeMap[it] }
+        val mutualIds = selectedId?.let { state.edges[it].orEmpty() }.orEmpty()
+        val highlightIds = highlightId?.let { id ->
+            setOf(id) + state.edges[id].orEmpty()
+        }.orEmpty()
+
+        Scaffold(
+            topBar = {
+                CenterAlignedTopAppBar(
+                    title = {
+                        Text(
+                            text = strings.friendNetworkTitle,
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { navigator.pop() }) {
+                            Icon(
+                                painter = rememberVectorPainter(AppIcons.ArrowBackIosNew),
+                                tint = MaterialTheme.colorScheme.primary,
+                                contentDescription = "back"
+                            )
+                        }
+                    },
+                    actions = {
+                        IconButton(
+                            enabled = !state.isLoading,
+                            onClick = { model.refresh() }
+                        ) {
+                            Icon(
+                                painter = rememberVectorPainter(AppIcons.Update),
+                                tint = MaterialTheme.colorScheme.primary,
+                                contentDescription = "refresh"
+                            )
+                        }
+                    }
+                )
+            },
+            contentColor = MaterialTheme.colorScheme.primary
+        ) { paddingValues ->
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                FriendNetworkHeader(
+                    updatedAt = state.updatedAt,
+                    isFromCache = state.isFromCache,
+                    progress = state.progress,
+                    isLoading = state.isLoading
+                )
+                Box(modifier = Modifier.fillMaxSize()) {
+                    if (state.nodes.isEmpty() && !state.isLoading) {
+                        Text(
+                            modifier = Modifier.align(Alignment.Center),
+                            text = strings.friendNetworkEmpty,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.outline
+                        )
+                    } else {
+                        FriendNetworkGraph(
+                            nodes = state.nodes,
+                            edges = state.edges,
+                            selfId = state.selfId,
+                            highlightIds = highlightIds,
+                            selectedId = selectedId,
+                            highlightId = highlightId,
+                            onHighlightChange = { highlightId = it },
+                            onNodeClick = { nodeId ->
+                                selectedId = nodeId
+                                showSheet = true
+                            }
+                        )
+                    }
+                    if (state.isLoading && state.nodes.isEmpty()) {
+                        CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
+                    }
+                }
+            }
+        }
+
+        ABottomSheet(
+            isVisible = showSheet && selectedNode != null,
+            sheetState = sheetState,
+            onDismissRequest = {
+                showSheet = false
+                selectedId = null
+            }
+        ) {
+            val node = selectedNode ?: return@ABottomSheet
+            val mutualUsers = mutualIds.mapNotNull { nodeMap[it] }
+                .sortedBy { it.displayName.lowercase() }
+            FriendNetworkSheet(
+                node = node,
+                mutualUsers = mutualUsers,
+                onUserClick = {
+                    navigator.push(UserProfileScreen(UserProfileVo(it)))
+                    showSheet = false
+                    selectedId = null
+                }
+            )
+        }
+    }
+}
+
+@Composable
+private fun FriendNetworkHeader(
+    updatedAt: Long?,
+    isFromCache: Boolean,
+    progress: FriendNetworkProgress?,
+    isLoading: Boolean,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+    ) {
+        updatedAt?.let {
+            Text(
+                text = strings.friendNetworkLastUpdated.replace("%s", formatTimestamp(it)),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+        if (isFromCache) {
+            Text(
+                text = strings.friendNetworkCacheHint,
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.outline
+            )
+        }
+        if (isLoading) {
+            val progressText = progress?.let { "${it.current}/${it.total}" }.orEmpty()
+            Text(
+                text = strings.friendNetworkBuilding.replace("%s", progressText),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.surfaceVariant)
+}
+
+@Composable
+private fun FriendNetworkGraph(
+    nodes: List<MutualFriendData>,
+    edges: Map<String, List<String>>,
+    selfId: String?,
+    highlightIds: Set<String>,
+    selectedId: String?,
+    highlightId: String?,
+    onHighlightChange: (String?) -> Unit,
+    onNodeClick: (String) -> Unit,
+) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val density = LocalDensity.current
+        val nodeSize = 42.dp
+        val nodeSizePx = with(density) { nodeSize.toPx() }
+        val labelWidth = 88.dp
+        val labelWidthPx = with(density) { labelWidth.toPx() }
+        val viewWidthPx = with(density) { maxWidth.toPx() }
+        val viewHeightPx = with(density) { maxHeight.toPx() }
+        val desiredSpacing = nodeSizePx * 3.8f
+        val ringSpacing = nodeSizePx * 3.2f
+        val maxRadius = estimateMaxRadius(
+            nodeCount = nodes.size - if (selfId == null) 0 else 1,
+            desiredSpacing = desiredSpacing,
+            ringSpacing = ringSpacing
+        )
+        val scaleFactor = maxOf(1f, sqrt(nodes.size.toFloat().coerceAtLeast(1f)) / 6f)
+        val requiredDiameter = maxRadius * 2f + desiredSpacing
+        val layoutWidthPx = maxOf(viewWidthPx * scaleFactor, requiredDiameter)
+        val layoutHeightPx = maxOf(viewHeightPx * scaleFactor, requiredDiameter)
+        val minScale = 0.35f
+        val maxScale = 3.5f
+        val initialScale = maxOf(
+            viewWidthPx / layoutWidthPx,
+            viewHeightPx / layoutHeightPx
+        ).coerceIn(minScale, 1.25f)
+        var scale by remember(nodes.size, viewWidthPx, viewHeightPx) { mutableStateOf(initialScale) }
+        var offset by remember(nodes.size, viewWidthPx, viewHeightPx) { mutableStateOf(Offset.Zero) }
+        var hasUserInteracted by remember(nodes.size, selfId) { mutableStateOf(false) }
+        val edgeList = remember(edges) { buildEdgeList(edges) }
+        val positions = remember(
+            nodes,
+            layoutWidthPx,
+            layoutHeightPx,
+            selfId,
+            edgeList,
+            edges,
+        ) {
+            computeNodePositions(
+                nodes = nodes,
+                selfId = selfId,
+                layoutWidthPx = layoutWidthPx,
+                layoutHeightPx = layoutHeightPx,
+                mutualCounts = nodes.associate { it.id to edges[it.id].orEmpty().size },
+                desiredSpacing = desiredSpacing,
+                ringSpacing = ringSpacing,
+            )
+        }
+        val viewCenter = Offset(viewWidthPx / 2f, viewHeightPx / 2f)
+        val layoutCenter = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
+        val centeredOffset = run {
+            val selfPos = selfId?.let { positions[it] } ?: layoutCenter
+            viewCenter - (selfPos * initialScale)
+        }
+        val renderScale = if (hasUserInteracted) scale else initialScale
+        val renderOffset = if (hasUserInteracted) offset else centeredOffset
+        val defaultColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+        val highlightColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f)
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .pointerInput(nodes.size, initialScale) {
+                    detectTapGestures(
+                        onDoubleTap = {
+                            scale = initialScale
+                            offset = centeredOffset
+                            hasUserInteracted = false
+                        }
+                    )
+                }
+                .pointerInput(nodes.size) {
+                    detectTransformGestures { centroid, pan, zoom, _ ->
+                        val currentScale = if (hasUserInteracted) scale else initialScale
+                        val currentOffset = if (hasUserInteracted) offset else centeredOffset
+                        if (!hasUserInteracted && (pan != Offset.Zero || zoom != 1f)) {
+                            hasUserInteracted = true
+                            scale = currentScale
+                            offset = currentOffset
+                        }
+                        val newScale = (currentScale * zoom).coerceIn(minScale, maxScale)
+                        val layoutPoint = (centroid - currentOffset) / currentScale
+                        val nextOffset = centroid - (layoutPoint * newScale)
+                offset = nextOffset + pan
+                        scale = newScale
+                    }
+                }
+        ) {
+            Box(
+                modifier = Modifier
+                    .graphicsLayer {
+                        translationX = renderOffset.x
+                        translationY = renderOffset.y
+                        scaleX = renderScale
+                        scaleY = renderScale
+                    }
+                    .width(with(density) { layoutWidthPx.toDp() })
+                    .height(with(density) { layoutHeightPx.toDp() })
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    edgeList.forEach { (from, to) ->
+                        val fromPos = positions[from] ?: return@forEach
+                        val toPos = positions[to] ?: return@forEach
+                        val isHighlighted = highlightId != null &&
+                            ((from == highlightId && highlightIds.contains(to)) ||
+                                (to == highlightId && highlightIds.contains(from)))
+                        drawLine(
+                            color = if (isHighlighted) highlightColor else defaultColor,
+                            start = fromPos,
+                            end = toPos,
+                            strokeWidth = if (isHighlighted) 3f else 1.5f
+                        )
+                    }
+                }
+
+                nodes.forEach { node ->
+                    val pos = positions[node.id] ?: return@forEach
+                    val offset = IntOffset(
+                        x = (pos.x - labelWidthPx / 2).roundToInt(),
+                        y = (pos.y - nodeSizePx / 2).roundToInt()
+                    )
+                    val isHighlighted = highlightIds.isEmpty() || highlightIds.contains(node.id)
+                    val alpha = if (isHighlighted) 1f else 0.35f
+                    Box(
+                        modifier = Modifier
+                            .offset { offset }
+                            .width(labelWidth)
+                            .alpha(alpha)
+                            .pointerInput(node.id, highlightId) {
+                                detectTapGestures(
+                                    onTap = { onNodeClick(node.id) },
+                                    onLongPress = { onHighlightChange(node.id) },
+                                    onPress = {
+                                        tryAwaitRelease()
+                                        if (highlightId == node.id) {
+                                            onHighlightChange(null)
+                                        }
+                                    }
+                                )
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        FriendNetworkNode(
+                            node = node,
+                            size = nodeSize,
+                            isSelected = node.id == selectedId
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FriendNetworkNode(
+    node: MutualFriendData,
+    size: androidx.compose.ui.unit.Dp,
+    isSelected: Boolean,
+) {
+    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(
+            modifier = Modifier
+                .size(size)
+                .border(width = 2.dp, color = borderColor, shape = CircleShape)
+                .background(MaterialTheme.colorScheme.surface, CircleShape)
+        ) {
+            UserStateIcon(
+                modifier = Modifier.fillMaxSize(),
+                iconUrl = node.iconUrl,
+                userStatus = node.status
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        if (node.displayName.isNotBlank()) {
+            Text(
+                text = node.displayName,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = MaterialTheme.typography.labelSmall,
+                textAlign = TextAlign.Center,
+                color = MaterialTheme.colorScheme.onSurface
+            )
+        }
+    }
+}
+
+@Composable
+private fun FriendNetworkSheet(
+    node: MutualFriendData,
+    mutualUsers: List<MutualFriendData>,
+    onUserClick: (MutualFriendData) -> Unit,
+) {
+    Column(modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onUserClick(node) }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            UserStateIcon(
+                modifier = Modifier.size(48.dp),
+                iconUrl = node.iconUrl,
+                userStatus = node.status
+            )
+            Spacer(modifier = Modifier.width(12.dp))
+            val displayName = node.displayName.ifBlank { strings.users }
+            Column {
+                Text(
+                    text = displayName,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = node.statusDescription.ifBlank { node.status.value },
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.outline
+                )
+            }
+        }
+        HorizontalDivider()
+        Spacer(modifier = Modifier.height(8.dp))
+        val visibleMutualUsers = mutualUsers.filter { it.id != HIDDEN_MUTUAL_USER_ID }
+        val hiddenCount = mutualUsers.size - visibleMutualUsers.size
+        val titleText = if (hiddenCount > 0) {
+            strings.mutualFriendsCountWithHidden
+                .replace("%total%", mutualUsers.size.toString())
+                .replace("%hidden%", hiddenCount.toString())
+        } else {
+            strings.mutualFriendsCount.replace("%total%", mutualUsers.size.toString())
+        }
+        Text(
+            text = titleText,
+            style = MaterialTheme.typography.titleSmall,
+            color = MaterialTheme.colorScheme.primary
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        if (mutualUsers.isEmpty()) {
+            Text(
+                text = strings.mutualFriendsEmpty.replace("%s", node.displayName),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline
+            )
+        } else {
+            LazyColumn(modifier = Modifier.fillMaxWidth().height(280.dp)) {
+                itemsIndexed(
+                    items = visibleMutualUsers,
+                    key = { index, user -> "${user.id}#$index" }
+                ) { _, user ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .clickable { onUserClick(user) },
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        UserStateIcon(
+                            modifier = Modifier.size(32.dp),
+                            iconUrl = user.iconUrl,
+                            userStatus = user.status
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            text = user.displayName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            }
+        }
+        Spacer(modifier = Modifier.height(8.dp))
+    }
+}
+
+private const val HIDDEN_MUTUAL_USER_ID = "usr_00000000-0000-0000-0000-000000000000"
+
+private fun buildEdgeList(edges: Map<String, List<String>>): List<Pair<String, String>> {
+    val seen = HashSet<String>()
+    val list = mutableListOf<Pair<String, String>>()
+    edges.forEach { (from, tos) ->
+        tos.forEach { to ->
+            if (from == to) return@forEach
+            val key = if (from < to) "$from|$to" else "$to|$from"
+            if (seen.add(key)) {
+                list.add(from to to)
+            }
+        }
+    }
+    return list
+}
+
+private fun estimateMaxRadius(
+    nodeCount: Int,
+    desiredSpacing: Float,
+    ringSpacing: Float,
+): Float {
+    if (nodeCount <= 0) return ringSpacing
+    var remaining = nodeCount
+    var radius = ringSpacing
+    var maxRadius = radius
+    while (remaining > 0) {
+        val circumference = 2f * PI.toFloat() * radius
+        val nodesOnRing = maxOf(6, (circumference / desiredSpacing).toInt())
+        remaining -= nodesOnRing
+        maxRadius = radius
+        radius += ringSpacing
+    }
+    return maxRadius
+}
+
+private fun computeNodePositions(
+    nodes: List<MutualFriendData>,
+    selfId: String?,
+    layoutWidthPx: Float,
+    layoutHeightPx: Float,
+    mutualCounts: Map<String, Int>,
+    desiredSpacing: Float,
+    ringSpacing: Float,
+): Map<String, Offset> {
+    if (nodes.isEmpty()) return emptyMap()
+    val center = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
+    val orderedNodes = nodes.sortedWith(
+        compareByDescending<MutualFriendData> { it.id == selfId }
+            .thenByDescending { mutualCounts[it.id] ?: 0 }
+            .thenBy { it.displayName.lowercase() }
+    )
+    val others = orderedNodes.filter { it.id != selfId }
+    val positions = mutableMapOf<String, Offset>()
+
+    selfId?.let { positions[it] = center }
+
+    var radius = ringSpacing
+    var index = 0
+
+    while (index < others.size) {
+        val circumference = 2f * PI.toFloat() * radius
+        val nodesOnRing = maxOf(6, (circumference / desiredSpacing).toInt())
+        val count = min(nodesOnRing, others.size - index)
+        val angleStep = (2f * PI.toFloat()) / count
+        val startAngle = (index % maxOf(1, count)) * 0.15f
+        for (i in 0 until count) {
+            val angle = startAngle + i * angleStep
+            val x = center.x + radius * cos(angle.toDouble()).toFloat()
+            val y = center.y + radius * sin(angle.toDouble()).toFloat()
+            positions[others[index].id] = Offset(x, y)
+            index += 1
+        }
+        radius += ringSpacing
+    }
+
+    return positions
+}
+
+private fun formatTimestamp(epochMillis: Long): String {
+    val local = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
+    val hour = local.hour.toString().padStart(2, '0')
+    val minute = local.minute.toString().padStart(2, '0')
+    return "${local.date} $hour:$minute"
+}

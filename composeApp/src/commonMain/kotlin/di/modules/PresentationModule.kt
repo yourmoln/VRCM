@@ -8,10 +8,13 @@ import coil3.request.crossfade
 import coil3.util.DebugLogger
 import io.github.vrcmteam.vrcm.presentation.screens.auth.AuthScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendListPagerModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendLocationPagerModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.SearchListPagerModel
+import io.github.vrcmteam.vrcm.presentation.screens.user.FriendNetworkScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.settings.SettingsModel
@@ -34,11 +37,14 @@ val presentationModule: Module = module {
     factoryOf(::AuthScreenModel)
     factoryOf(::HomeScreenModel)
     factoryOf (::UserProfileScreenModel)
+    factoryOf(::MutualFriendsScreenModel)
+    factoryOf(::FriendNetworkScreenModel)
     singleOf(::GalleryScreenModel)
     singleOf (::FriendLocationPagerModel)
     singleOf (::FriendListPagerModel)
     singleOf(::SearchListPagerModel)
     singleOf(::WorldProfileScreenModel)
+    singleOf(::GroupProfileScreenModel)
     single<ImageLoader> { imageLoaderDefinition(it) }
     configThemeColor()
 }

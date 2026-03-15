@@ -22,9 +22,12 @@ import io.github.vrcmteam.vrcm.network.api.attributes.BlueprintType
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
 import io.github.vrcmteam.vrcm.network.api.invite.InviteApi
 import io.github.vrcmteam.vrcm.presentation.compoments.IconLabelRow
+import io.github.vrcmteam.vrcm.presentation.compoments.LocalSharedSuffixKey
 import io.github.vrcmteam.vrcm.presentation.compoments.RegionIcon
 import io.github.vrcmteam.vrcm.presentation.extensions.currentNavigator
 import io.github.vrcmteam.vrcm.presentation.extensions.enableIf
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.world.data.InstanceVo
@@ -230,9 +233,16 @@ private fun DeviceStatsRow(
 @Composable
 private fun BottomActionSection(instance: InstanceVo, expandProgress: Float = 1f) {
     val currentNavigator = currentNavigator
+    val sharedSuffixKey = LocalSharedSuffixKey.current
     val onClickUserIcon = { user: IUser ->
         currentNavigator push UserProfileScreen(
             userProfileVO = UserProfileVo(user)
+        )
+    }
+    val onClickGroup = { groupId: String, groupName: String ->
+        currentNavigator push GroupProfileScreen(
+            groupProfileVo = GroupProfileVo(groupId = groupId, name = groupName),
+            sharedSuffixKey = sharedSuffixKey
         )
     }
     val isExtended = expandProgress == 1f
@@ -263,12 +273,17 @@ private fun BottomActionSection(instance: InstanceVo, expandProgress: Float = 1f
                 tint = MaterialTheme.colorScheme.primary,
                 contentDescription = "OwnerIcon"
             )
-            // TODO: Group详情页跳转
             Text(
-                modifier = Modifier.enableIf(owner.type == BlueprintType.User && isExtended) {
-                    clickable { onClickUserIcon(UserProfileVo(owner.id)) }
+                modifier = Modifier.enableIf(isExtended) {
+                    clickable {
+                        if (owner.type == BlueprintType.User) {
+                            onClickUserIcon(UserProfileVo(owner.id))
+                        } else if (owner.type == BlueprintType.Group) {
+                            onClickGroup(owner.id, owner.displayName)
+                        }
+                    }
                 },
-                textDecoration = if (owner.type == BlueprintType.User) TextDecoration.Underline else null,
+                textDecoration = if (owner.type == BlueprintType.User || owner.type == BlueprintType.Group) TextDecoration.Underline else null,
                 text = owner.displayName,
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.outline,
