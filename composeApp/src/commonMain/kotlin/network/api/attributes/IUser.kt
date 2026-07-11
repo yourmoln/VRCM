@@ -27,6 +27,7 @@ interface IUser {
     val status: UserStatus
     val statusDescription: String
     val developerType: String
+    val location: String get() = LocationType.Offline.value
 
     val speakLanguages:List<String>
         get() = tags.filter { it.startsWith("language_") }.map { it.removePrefix("language_") }

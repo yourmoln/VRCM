@@ -20,12 +20,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
+import io.github.vrcmteam.vrcm.network.api.attributes.LocationType
 import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
 import io.github.vrcmteam.vrcm.network.api.invite.InviteApi
@@ -45,11 +47,13 @@ fun UserStateIcon(
     modifier: Modifier = Modifier,
     iconUrl: String?,
     userStatus: UserStatus? = null,
+    location: String? = null,
 ) {
+    val isHollow = userStatus != UserStatus.Offline && location != null && LocationType.fromValue(location) == LocationType.Offline
     AImage(
         modifier = Modifier
             .then(modifier)
-            .enableIf(userStatus != null) { drawSateCircle(GameColor.Status.fromValue(userStatus)) }
+            .enableIf(userStatus != null) { drawSateCircle(GameColor.Status.fromValue(userStatus), hollow = isHollow) }
             .aspectRatio(1f)
             .clip(CircleShape),
         imageData = iconUrl.orEmpty(),
@@ -84,7 +88,8 @@ fun UserIconsRow(
                 id = friend.id,
                 iconUrl = friend.iconUrl,
                 name = friend.displayName,
-                userStatus = friend.status
+                userStatus = friend.status,
+                location = friend.location
             ) { onClickUserIcon(friend) }
         }
     }
@@ -145,6 +150,7 @@ fun LazyItemScope.LocationFriend(
     iconUrl: String,
     name: String,
     userStatus: UserStatus,
+    location: String? = null,
     onClickUserIcon: () -> Unit,
 ) {
     Column(
@@ -156,7 +162,8 @@ fun LazyItemScope.LocationFriend(
         UserStateIcon(
             modifier = Modifier.sharedBoundsBy("${id}UserIcon").fillMaxWidth(),
             iconUrl = iconUrl,
-            userStatus = userStatus
+            userStatus = userStatus,
+            location = location
         )
         Text(
             modifier = Modifier.sharedBoundsBy("${id}UserName").fillMaxWidth(),
@@ -259,6 +266,8 @@ fun UserStatusRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(spacedBy)
     ) {
+        val isHollow = user != null && user.status != UserStatus.Offline && LocationType.fromValue(user.location) == LocationType.Offline
+        val bgColor = MaterialTheme.colorScheme.surface
         Canvas(
             modifier = Modifier
                 .size(iconSize)
@@ -270,7 +279,14 @@ fun UserStatusRow(
                     )
                 }
         ) {
-            drawCircle(GameColor.Status.fromValue(user?.status))
+            val statusColor = GameColor.Status.fromValue(user?.status)
+            if (isHollow) {
+                val strokeWidth = size.minDimension * 0.25f
+                drawCircle(bgColor, radius = size.minDimension / 2)
+                drawCircle(statusColor, radius = size.minDimension / 2 - strokeWidth / 2, style = Stroke(strokeWidth))
+            } else {
+                drawCircle(statusColor)
+            }
         }
         if (canCopy) {
             SelectionContainer {
