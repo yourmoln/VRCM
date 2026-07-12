@@ -18,6 +18,8 @@ internal const val FILES_API_PREFIX = "files"
 
 internal const val FILE_API_PREFIX = "file"
 
+internal const val PRINTS_API_PREFIX = "prints"
+
 internal const val WORLDS_API_PREFIX = "worlds"
 
 internal const val INVITE_API_PREFIX = "invite"

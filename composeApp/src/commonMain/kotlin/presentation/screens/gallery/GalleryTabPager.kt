@@ -28,6 +28,7 @@ import com.skydoves.landscapist.coil3.CoilImage
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
+import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.Pager
@@ -53,11 +54,24 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
 
         val navigator = LocalNavigator.currentOrThrow
 
+        // Print 使用独立的 API (GET /prints/user/{userId})
+        val isPrint = tagType == FileTagType.Print
 
         RefreshBox(
-            isRefreshing = galleryScreenModel.isRefreshingByTag(tagType),
-            doRefresh = { galleryScreenModel.refreshFiles(tagType) }
+            isRefreshing = if (isPrint) galleryScreenModel.isRefreshingPrints() else galleryScreenModel.isRefreshingByTag(tagType),
+            doRefresh = { if (isPrint) galleryScreenModel.refreshPrints() else galleryScreenModel.refreshFiles(tagType) }
         ) {
+            if (isPrint) {
+                // 拍立得使用 PrintData
+                val prints = galleryScreenModel.getPrints()
+                if (prints.isEmpty() && !galleryScreenModel.isRefreshingPrints()) {
+                    EmptyContent(
+                        message = strings.galleryTabNoFiles.replace("%s", title),
+                    )
+                } else {
+                    PrintGrid(prints)
+                }
+            } else {
             val files = galleryScreenModel.getFilesByTag(tagType)
 
             if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
@@ -115,6 +129,78 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
 
                     GalleryGrid(files, tagType)
                 }
+            }
+            } // end else (!isPrint)
+        }
+    }
+
+    /**
+     * 拍立得网格展示
+     */
+    @Composable
+    private fun PrintGrid(prints: List<PrintData>) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(
+                items = prints,
+                key = { it.id },
+            ) { print ->
+                PrintItem(print)
+            }
+        }
+    }
+
+    @Composable
+    private fun PrintItem(print: PrintData) {
+        val imageUrl = print.files?.image ?: ""
+        val (dialogContent, setDialogContent) = LocationDialogContent.current
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .aspectRatio(16f / 9f),
+        ) {
+            AnimatedVisibility(dialogContent == null || (dialogContent as ImagePreviewDialog).fileId != print.id) {
+                CoilImage(
+                    imageModel = { imageUrl },
+                    imageOptions = ImageOptions(
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.Center
+                    ),
+                    imageLoader = { koinInject() },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable {
+                            setDialogContent(ImagePreviewDialog(print.id, print.id, ".png", imageUrl))
+                        },
+                    loading = {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    failure = {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = strings.galleryTabLoadFailed,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                )
             }
         }
     }

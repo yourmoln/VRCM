@@ -137,8 +137,8 @@ private fun ColumnScope.SheetItems(
     val navigator = LocalNavigator.currentOrThrow
     val localeStrings = strings
     val scope = rememberCoroutineScope()
-    // 添加媒体库选项，只有当是自己的个人资料且是支持者时才显示
-    if (currentUser.isSelf && currentUser.isSupporter) {
+    // 添加媒体库选项，只有当是自己的个人资料时才显示
+    if (currentUser.isSelf) {
 
         SheetButtonItem(text = localeStrings.profileViewGallery, onClick = {
             scope.launch { hideSheet() }.invokeOnCompletion {
