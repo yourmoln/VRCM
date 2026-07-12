@@ -38,7 +38,7 @@ open class ThemeColor(
         animationSpec: AnimationSpec<Color> = tween(600)
     ): ColorScheme = colorScheme.let {
         ColorScheme(
-            primary = animateColorAsState(colorScheme.primary, animationSpec = animationSpec).value,
+            primary = animateColorAsState(it.primary, animationSpec = animationSpec).value,
             onPrimary = animateColorAsState(
                 it.onPrimary,
                 animationSpec = animationSpec
@@ -95,7 +95,7 @@ open class ThemeColor(
                 it.onBackground,
                 animationSpec = animationSpec
             ).value,
-            surface = animateColorAsState(colorScheme.surface, animationSpec = animationSpec).value,
+            surface = animateColorAsState(it.surface, animationSpec = animationSpec).value,
             onSurface = animateColorAsState(
                 it.onSurface,
                 animationSpec = animationSpec
@@ -120,8 +120,8 @@ open class ThemeColor(
                 it.inverseOnSurface,
                 animationSpec = animationSpec
             ).value,
-            error = animateColorAsState(colorScheme.error, animationSpec = animationSpec).value,
-            onError = animateColorAsState(colorScheme.onError, animationSpec = animationSpec).value,
+            error = animateColorAsState(it.error, animationSpec = animationSpec).value,
+            onError = animateColorAsState(it.onError, animationSpec = animationSpec).value,
             errorContainer = animateColorAsState(
                 it.errorContainer,
                 animationSpec = animationSpec
@@ -130,12 +130,12 @@ open class ThemeColor(
                 it.onErrorContainer,
                 animationSpec = animationSpec
             ).value,
-            outline = animateColorAsState(colorScheme.outline, animationSpec = animationSpec).value,
+            outline = animateColorAsState(it.outline, animationSpec = animationSpec).value,
             outlineVariant = animateColorAsState(
                 it.outlineVariant,
                 animationSpec = animationSpec
             ).value,
-            scrim = animateColorAsState(colorScheme.scrim, animationSpec = animationSpec).value,
+            scrim = animateColorAsState(it.scrim, animationSpec = animationSpec).value,
             surfaceBright = animateColorAsState(
                 it.surfaceBright,
                 animationSpec = animationSpec
