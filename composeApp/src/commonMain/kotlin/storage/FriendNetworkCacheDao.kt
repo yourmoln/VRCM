@@ -3,7 +3,10 @@ package io.github.vrcmteam.vrcm.storage
 import com.russhwolf.settings.Settings
 import io.github.vrcmteam.vrcm.storage.data.FriendNetworkCache
 import kotlinx.serialization.json.Json
+import kotlin.io.encoding.Base64
+import kotlin.io.encoding.ExperimentalEncodingApi
 
+@OptIn(ExperimentalEncodingApi::class)
 class FriendNetworkCacheDao(
     private val settings: Settings,
 ) {
@@ -13,12 +16,13 @@ class FriendNetworkCacheDao(
 
     fun load(userId: String): FriendNetworkCache? {
         val raw = settings.getStringOrNull(key(userId)) ?: return null
-        return runCatching { json.decodeFromString<FriendNetworkCache>(raw) }.getOrNull()
+        val decoded = Base64.decode(raw).decodeToString()
+        return runCatching { json.decodeFromString<FriendNetworkCache>(decoded) }.getOrNull()
     }
 
     fun save(cache: FriendNetworkCache) {
         val raw = json.encodeToString(FriendNetworkCache.serializer(), cache)
-        settings.putString(key(cache.userId), raw)
+        settings.putString(key(cache.userId), Base64.encode(raw.encodeToByteArray()))
     }
 
     fun clear(userId: String) {
