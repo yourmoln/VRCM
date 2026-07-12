@@ -4,8 +4,11 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
+import io.github.vrcmteam.vrcm.network.api.groups.data.LimitedGroup
 import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.presentation.extensions.currentNavigator
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
@@ -15,7 +18,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 标准搜索列表组件
- * 封装GenericSearchList，固定tabs为用户、世界、模型和群组
+ * 封装GenericSearchList，固定tabs为用户、世界，可选显示群组
  */
 @Composable
 fun StandardSearchList(
@@ -93,9 +96,7 @@ fun StandardSearchList(
                     onWorldClick = onWorldClick
                 )
             }
-            SearchTabType.MODEL.index -> { // 模型标签页
-                modelContentBuilder?.invoke(this)
-            }
+
             SearchTabType.GROUP.index -> { // 群组标签页
                 groupContentBuilder?.invoke(this)
             }

@@ -3,6 +3,8 @@ package io.github.vrcmteam.vrcm.presentation.screens.user
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.*
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
@@ -30,7 +32,11 @@ import io.github.vrcmteam.vrcm.presentation.extensions.openUrl
 import io.github.vrcmteam.vrcm.presentation.screens.auth.AuthAnimeScreen
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreen
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
+import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
+import io.github.vrcmteam.vrcm.presentation.screens.user.FriendNetworkScreen
+import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.components.FavoriteGroupBottomSheet
 import io.github.vrcmteam.vrcm.presentation.screens.world.data.WorldProfileVo
@@ -38,6 +44,7 @@ import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.LanguageIcons
 import io.github.vrcmteam.vrcm.presentation.supports.WebIcons
+import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import kotlinx.coroutines.launch
 import org.koin.core.parameter.parametersOf
 
@@ -63,6 +70,7 @@ data class UserProfileScreen(
         }
 
         val currentUser = userProfileScreenModel.userState
+        val userGroups = userProfileScreenModel.userGroups
         var bottomSheetIsVisible by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
         var openAlertDialog by remember { mutableStateOf(false) }
@@ -79,6 +87,7 @@ data class UserProfileScreen(
                 ProfileContent(
                     currentUser = currentUser,
                     friendLocation = userProfileScreenModel.friendLocation,
+                    userGroups = userGroups,
                     ratio = ratio
                 )
             }
@@ -149,6 +158,20 @@ private fun ColumnScope.SheetItems(
             }
         })
     }
+
+    SheetButtonItem(
+        text = if (currentUser.isSelf) localeStrings.profileViewFriendNetwork else localeStrings.profileViewMutualFriends,
+        onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                if (currentUser.isSelf) {
+                    navigator.push(FriendNetworkScreen)
+                } else {
+                    navigator.push(MutualFriendsScreen(currentUser.id, currentUser.displayName))
+                }
+            }
+        }
+    )
 
     FriendRequestSheetItem(
         currentUser,
@@ -286,11 +309,14 @@ private fun JsonAlertDialog(
 private fun ProfileContent(
     currentUser: UserProfileVo?,
     friendLocation: FriendLocation?,
+    userGroups: List<LimitedUserGroup>,
     ratio: Float,
 ) {
     if (currentUser == null) return
+    val sharedSuffixKey = LocalSharedSuffixKey.current
     val inverseRatio = 1 - ratio
     val scrollState = rememberScrollState()
+    val navigator = currentNavigator
     // 当上方图片完整显示时子内容自动滚动到顶部
     if (inverseRatio == 0f) {
         LaunchedEffect(Unit) {
@@ -309,7 +335,7 @@ private fun ProfileContent(
     // LocationCard: show the room of this user and friends in the same room
     friendLocation?.let { loc ->
         val navigator = currentNavigator
-        val sharedSuffixKey = LocalSharedSuffixKey.current
+        val locationSharedSuffixKey = "UER:$sharedSuffixKey"
         // 创建临时的 WorldProfileVo
         val onClickWorldImage = {
             val homeInstanceVo = friendLocation.instants.value
@@ -317,12 +343,12 @@ private fun ProfileContent(
             navigator push WorldProfileScreen(
                 worldProfileVO = tempWorldProfileVo,
                 location = friendLocation.location,
-                sharedSuffixKey = "UER:$sharedSuffixKey"
+                sharedSuffixKey = locationSharedSuffixKey
             )
         }
 
         // 防止当前用户的共享元素冲突
-        CompositionLocalProvider(LocalSharedSuffixKey provides "UER:$sharedSuffixKey") {
+        CompositionLocalProvider(LocalSharedSuffixKey provides locationSharedSuffixKey) {
             LocationCard(
                 location = loc,
                 isSelected = isSelected,
@@ -344,11 +370,103 @@ private fun ProfileContent(
         }
     }
 
+    UserGroupsSection(
+        groups = userGroups,
+        onGroupClick = { group ->
+            navigator push GroupProfileScreen(
+                groupProfileVo = GroupProfileVo(
+                    groupId = group.groupId,
+                    name = group.name,
+                    shortCode = group.shortCode,
+                    iconUrl = group.iconUrl,
+                    bannerUrl = group.bannerUrl,
+                    memberCount = group.memberCount,
+                ),
+                sharedSuffixKey = sharedSuffixKey
+            )
+        }
+    )
+
     Box(
         modifier = Modifier
             .padding(top = 12.dp)
     ) {
         BottomCardTab(scrollState, currentUser)
+    }
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun UserGroupsSection(
+    groups: List<LimitedUserGroup>,
+    onGroupClick: (LimitedUserGroup) -> Unit,
+) {
+    if (groups.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = strings.groups,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(groups, key = { it.groupId }) { group ->
+                Surface(
+                    modifier = Modifier
+                        .width(180.dp)
+                        .height(88.dp)
+                        .clip(MaterialTheme.shapes.large)
+                        .clickable { onGroupClick(group) },
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GroupIcon(
+                                iconUrl = group.iconUrl,
+                                size = 36.dp,
+                                modifier = Modifier.sharedBoundsBy("${group.groupId}GroupIcon")
+                            )
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    modifier = Modifier.sharedBoundsBy("${group.groupId}GroupName"),
+                                    text = group.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (group.shortCode.isNotBlank()) {
+                                    Text(
+                                        text = "#${group.shortCode}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = "${group.memberCount} ${strings.groupMembers}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -479,7 +597,7 @@ private inline fun LangAndLinkRow(userProfileVO: UserProfileVo) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun LanguagesRow(
+internal fun LanguagesRow(
     speakLanguages: List<String>,
     width: Dp = 32.dp,
 ) {

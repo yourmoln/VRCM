@@ -9,5 +9,9 @@ data class Gallery(
     val id: String,
     val membersOnly: Boolean,
     val name: String,
+    val roleIdsToAutoApprove: List<String>? = null,
+    val roleIdsToManage: List<String>? = null,
+    val roleIdsToSubmit: List<String>? = null,
+    val roleIdsToView: List<String>? = null,
     val updatedAt: String
 )

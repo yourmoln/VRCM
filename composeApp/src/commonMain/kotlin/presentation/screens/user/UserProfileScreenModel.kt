@@ -16,6 +16,7 @@ import io.github.vrcmteam.vrcm.network.api.instances.InstancesApi
 import io.github.vrcmteam.vrcm.network.api.notification.NotificationApi
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
+import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.HomeInstanceVo
@@ -50,8 +51,12 @@ class UserProfileScreenModel(
     private val _userJson = mutableStateOf("")
     val userJson by _userJson
 
+    private val _userGroups = mutableStateOf<List<LimitedUserGroup>>(emptyList())
+    val userGroups by _userGroups
+
     fun refreshUser(userId: String) =
         screenModelScope.launch(Dispatchers.IO) {
+            _userGroups.value = emptyList()
             authService.reTryAuthCatching {
                 usersApi.fetchUserResponse(userId)
             }.onFailure {
@@ -65,6 +70,7 @@ class UserProfileScreenModel(
                     }
                     .onFailure { handleError(it) }
                 _userJson.value = response.bodyAsText().pretty()
+                loadUserGroups(userId)
             }
         }
 
@@ -114,6 +120,16 @@ class UserProfileScreenModel(
     private suspend fun handleError(it: Throwable) {
         logger.error(it.message.toString())
         SharedFlowCentre.toastText.emit(ToastText.Error(it.message.toString()))
+    }
+
+    private suspend fun loadUserGroups(userId: String) {
+        authService.reTryAuthCatching {
+            usersApi.getUserGroups(userId)
+        }.onSuccess {
+            _userGroups.value = it
+        }.onFailure {
+            handleError(it)
+        }
     }
 
     fun computeFriendLocation(location: String) {
@@ -221,4 +237,3 @@ private fun UserProfileVo.toFriendData() =
         userIcon = userIcon,
         pronouns = pronouns,
     )
-

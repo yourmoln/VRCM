@@ -59,7 +59,7 @@ fun ProfileScaffold(
     profileImageUrl: String?,
     iconUrl: String?,
     onReturn: () -> Unit,
-    onMenu:  () -> Unit,
+    onMenu:  (() -> Unit)? = null,
     content: @Composable ColumnScope.(Float) -> Unit
 ) {
     BoxWithConstraints {
