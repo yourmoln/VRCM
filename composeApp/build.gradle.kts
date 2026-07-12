@@ -11,6 +11,10 @@ plugins {
     alias(libs.plugins.compose.compiler)
 }
 
+configurations.all {
+    resolutionStrategy.force(libs.kotlinx.datetime)
+}
+
 kotlin {
 
     jvm("desktop")
