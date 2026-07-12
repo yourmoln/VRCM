@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.draggable
 import androidx.compose.foundation.gestures.rememberDraggableState
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -15,6 +16,7 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
@@ -47,6 +49,7 @@ fun Modifier.drawSate(
     onDraw(borderRadius, borderOffset)
 } else this
 
+@Composable
 fun Modifier.drawSateCircle(
     color: Color,
     percentage: Float = 0.125f,
@@ -54,11 +57,18 @@ fun Modifier.drawSateCircle(
     isInLine: Boolean = true,
     alignment: Alignment = Alignment.BottomEnd,
     enable: Boolean = true,
+    hollow: Boolean = false,
+    backgroundColor: Color = MaterialTheme.colorScheme.surface,
     onDraw: ContentDrawScope.(Float, Offset) -> Unit = { borderRadius: Float, borderOffset: Offset ->
         val radius = (size.maxDimension - borderWidth.toPx()) * percentage
         this.drawContent()
-        drawCircle(Color.White, borderRadius, borderOffset)
-        drawCircle(color, radius, borderOffset)
+        drawCircle(backgroundColor, borderRadius, borderOffset)
+        if (hollow) {
+            val strokeWidth = borderRadius - radius
+            drawCircle(color, radius - strokeWidth / 2, borderOffset, style = Stroke(strokeWidth))
+        } else {
+            drawCircle(color, radius, borderOffset)
+        }
     },
 ) = drawSate(
     percentage = percentage,

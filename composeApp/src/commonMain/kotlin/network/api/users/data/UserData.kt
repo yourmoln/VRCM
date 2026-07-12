@@ -29,7 +29,7 @@ data class UserData(
     override val lastLogin: String,
     @SerialName("last_platform")
     override val lastPlatform: String,
-    val location: String,
+    override val location: String,
     val note: String,
     override val profilePicOverride: String,
     val state: UserState,
