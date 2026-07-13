@@ -6,11 +6,11 @@ import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
+import io.github.vrcmteam.vrcm.network.api.users.data.CurrentUpdateUserData
+import io.github.vrcmteam.vrcm.network.api.users.data.UpdateUserInfoData
 import io.ktor.client.*
 import io.ktor.client.request.*
 import io.ktor.http.*
-import network.api.users.data.CurrentUpdateUserData
-import network.api.users.data.UpdateUserInfoData
 
 class UsersApi(private val client: HttpClient) {
 

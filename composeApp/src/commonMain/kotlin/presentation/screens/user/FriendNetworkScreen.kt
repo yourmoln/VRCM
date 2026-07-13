@@ -602,7 +602,7 @@ private fun computeNodePositions(
     // 初始化位置：随机散布在中心附近（紧凑）
     val x = FloatArray(n)
     val y = FloatArray(n)
-    val rng = java.util.Random(42)
+    val rng = kotlin.random.Random(42)
     for (i in 0 until n) {
         val angle = rng.nextFloat() * 2f * PI.toFloat()
         val r = rng.nextFloat() * desiredSpacing * 0.3f

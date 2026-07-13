@@ -13,7 +13,7 @@ class FriendNetworkCacheDao(
     private val json = Json { encodeDefaults = true; ignoreUnknownKeys = true }
 
     private fun key(userId: String) = "${DaoKeys.FriendNetwork.KEY_PREFIX}.$userId"
-
+    //引入base64防止中文存储过程中乱码
     fun load(userId: String): FriendNetworkCache? {
         val raw = settings.getStringOrNull(key(userId)) ?: return null
         val decoded = Base64.decode(raw).decodeToString()

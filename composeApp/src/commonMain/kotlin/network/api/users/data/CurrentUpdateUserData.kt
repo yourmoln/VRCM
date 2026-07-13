@@ -1,4 +1,4 @@
-package network.api.users.data
+package io.github.vrcmteam.vrcm.network.api.users.data
 
 import cafe.adriel.voyager.core.lifecycle.JavaSerializable
 import io.github.vrcmteam.vrcm.network.api.attributes.AgeVerificationStatus

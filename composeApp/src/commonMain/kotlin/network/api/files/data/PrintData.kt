@@ -12,13 +12,9 @@ data class PrintData(
     val id: String,
     val files: PrintFiles? = null,
     val note: String? = null,
-    @SerialName("worldId")
     val worldId: String? = null,
-    @SerialName("worldName")
     val worldName: String? = null,
-    @SerialName("authorId")
     val authorId: String? = null,
-    @SerialName("authorName")
     val authorName: String? = null,
     @SerialName("created_at")
     val createdAt: String? = null,

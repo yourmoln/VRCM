@@ -118,7 +118,8 @@ class FriendNetworkScreenModel(
             fun edgesToComm(nodeIdx: Int, targetComm: Int): Int {
                 var count = 0
                 for (neighbor in adjacency[nodeIds[nodeIdx]].orEmpty()) {
-                    if (comm[idx[neighbor]!!] == targetComm) count++
+                    val j = idx[neighbor] ?: continue
+                    if (comm[j] == targetComm) count++
                 }
                 return count
             }
@@ -135,7 +136,8 @@ class FriendNetworkScreenModel(
                     // 收集邻居社区
                     val neighborComms = mutableSetOf<Int>()
                     for (neighbor in adjacency[nodeIds[i]].orEmpty()) {
-                        neighborComms.add(comm[idx[neighbor]!!])
+                        val j = idx[neighbor] ?: continue
+                        neighborComms.add(comm[j])
                     }
 
                     // 从当前社区移除

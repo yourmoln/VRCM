@@ -164,40 +164,27 @@ private inline fun MemberInfoRow(
                 }
             ) {
                 if (!it) {
-                    // 只有一个好友时，显示头像+名字
-                    if (friendList.size == 1) {
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                    Row(
+                        modifier = Modifier.fillMaxSize(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(if (friendList.size == 1) 6.dp else (-8).dp)
+                    ) {
+                        friendList.take(5).forEach { friendState ->
                             UserStateIcon(
                                 modifier = Modifier
                                     .align(Alignment.CenterVertically)
                                     .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                                iconUrl = friendList[0].value.iconUrl,
+                                iconUrl = friendState.value.iconUrl,
                             )
+                        }
+                        friendList.singleOrNull()?.let { friendState ->
                             Text(
-                                text = friendList[0].value.displayName,
+                                text = friendState.value.displayName,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis,
                                 style = MaterialTheme.typography.labelSmall,
                                 color = MaterialTheme.colorScheme.onSurface
                             )
-                        }
-                    } else {
-                        Row(
-                            modifier = Modifier.fillMaxSize(),
-                            horizontalArrangement = Arrangement.spacedBy((-8).dp)
-                        ) {
-                            friendList.take(5).forEach { friendState ->
-                                UserStateIcon(
-                                    modifier = Modifier
-                                        .align(Alignment.CenterVertically)
-                                        .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape),
-                                    iconUrl = friendState.value.iconUrl,
-                                )
-                            }
                         }
                     }
                 } else {

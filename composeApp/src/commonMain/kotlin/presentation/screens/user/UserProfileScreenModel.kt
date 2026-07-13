@@ -18,7 +18,7 @@ import io.github.vrcmteam.vrcm.network.api.notification.NotificationApi
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
-import network.api.users.data.UpdateUserInfoData
+import io.github.vrcmteam.vrcm.network.api.users.data.UpdateUserInfoData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.HomeInstanceVo
@@ -100,6 +100,7 @@ class UserProfileScreenModel(
                 )
             }.onFailure {
                 handleError(it)
+                return@launch
             }
 
             // 更新语言 tags
@@ -113,11 +114,17 @@ class UserProfileScreenModel(
                 if (toAdd.isNotEmpty()) {
                     authService.reTryAuthCatching {
                         usersApi.addTags(userState.id, toAdd.map { "language_$it" })
+                    }.onFailure {
+                        handleError(it)
+                        return@launch
                     }
                 }
                 if (toRemove.isNotEmpty()) {
                     authService.reTryAuthCatching {
                         usersApi.removeTags(userState.id, toRemove.map { "language_$it" })
+                    }.onFailure {
+                        handleError(it)
+                        return@launch
                     }
                 }
             }

@@ -2,8 +2,9 @@ package io.github.vrcmteam.vrcm.network.api.worlds.data
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
-import kotlinx.serialization.descriptors.buildClassSerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
@@ -13,7 +14,8 @@ import kotlinx.serialization.json.*
  * API 返回的 instances 是混合类型数组
  */
 object InstancesSerializer : KSerializer<List<List<String>>> {
-    override val descriptor: SerialDescriptor = buildClassSerialDescriptor("Instances")
+    private val delegate = ListSerializer(ListSerializer(String.serializer()))
+    override val descriptor: SerialDescriptor = delegate.descriptor
 
     override fun deserialize(decoder: Decoder): List<List<String>> {
         val json = decoder as? JsonDecoder
@@ -30,8 +32,7 @@ object InstancesSerializer : KSerializer<List<List<String>>> {
         }
     }
 
-    override fun serialize(encoder: Encoder, value: List<List<String>>) {
-        // 序列化时直接使用默认行为
-        throw SerializationException("Serialization not supported")
-    }
+    override fun serialize(encoder: Encoder, value: List<List<String>>) =
+        delegate.serialize(encoder, value)
+
 }
