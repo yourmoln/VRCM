@@ -66,12 +66,7 @@ import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
 import kotlin.time.ExperimentalTime
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 object FriendNetworkScreen : Screen {
 
@@ -154,11 +149,12 @@ object FriendNetworkScreen : Screen {
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
-                    } else {
+                    } else if (state.layout != null) {
                         FriendNetworkGraph(
                             nodes = state.nodes,
                             edges = state.edges,
                             nodeColors = state.nodeColors,
+                            layout = state.layout!!,
                             selfId = null,
                             highlightIds = highlightIds,
                             selectedId = selectedId,
@@ -244,6 +240,7 @@ private fun FriendNetworkGraph(
     nodes: List<MutualFriendData>,
     edges: Map<String, List<String>>,
     nodeColors: Map<String, Color>,
+    layout: FriendNetworkLayoutResult,
     selfId: String?,
     highlightIds: Set<String>,
     selectedId: String?,
@@ -255,22 +252,12 @@ private fun FriendNetworkGraph(
         val density = LocalDensity.current
         val baseNodeSizePx = 43f
         val maxExtraSizePx = 34f
-        val nodeSizePx = baseNodeSizePx + maxExtraSizePx // 布局计算用的固定参考值
         val labelWidth = 88.dp
         val labelWidthPx = with(density) { labelWidth.toPx() }
         val viewWidthPx = with(density) { maxWidth.toPx() }
         val viewHeightPx = with(density) { maxHeight.toPx() }
-        val desiredSpacing = nodeSizePx * 1.3f
-        val ringSpacing = nodeSizePx * 1.1f
-        val maxRadius = estimateMaxRadius(
-            nodeCount = nodes.size - if (selfId == null) 0 else 1,
-            desiredSpacing = desiredSpacing,
-            ringSpacing = ringSpacing
-        )
-        val scaleFactor = maxOf(1f, sqrt(nodes.size.toFloat().coerceAtLeast(1f)) / 10f)
-        val requiredDiameter = maxRadius * 2f + desiredSpacing
-        val layoutWidthPx = maxOf(viewWidthPx * scaleFactor, requiredDiameter)
-        val layoutHeightPx = maxOf(viewHeightPx * scaleFactor, requiredDiameter)
+        val layoutWidthPx = layout.layoutWidthPx
+        val layoutHeightPx = layout.layoutHeightPx
         val minScale = 0.35f
         val maxScale = 3.5f
         val initialScale = maxOf(
@@ -284,25 +271,7 @@ private fun FriendNetworkGraph(
         // 计算每个节点的度数（连接数）
         val nodeDegree = remember(edges) { nodes.associate { it.id to edges[it.id].orEmpty().size } }
         val maxDegree = remember(nodeDegree) { nodeDegree.values.maxOrNull() ?: 1 }
-        val positions = remember(
-            nodes,
-            layoutWidthPx,
-            layoutHeightPx,
-            selfId,
-            edgeList,
-            edges,
-        ) {
-            computeNodePositions(
-                nodes = nodes,
-                selfId = selfId,
-                layoutWidthPx = layoutWidthPx,
-                layoutHeightPx = layoutHeightPx,
-                mutualCounts = nodeDegree,
-                desiredSpacing = desiredSpacing,
-                ringSpacing = ringSpacing,
-                edges = edges,
-            )
-        }
+        val positions = layout.positions
         val viewCenter = Offset(viewWidthPx / 2f, viewHeightPx / 2f)
         val layoutCenter = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
         val centeredOffset = run {
@@ -562,118 +531,6 @@ private fun buildEdgeList(edges: Map<String, List<String>>): List<Pair<String, S
         }
     }
     return list
-}
-
-private fun estimateMaxRadius(
-    nodeCount: Int,
-    desiredSpacing: Float,
-    ringSpacing: Float,
-): Float {
-    // 力导向布局不再需要预估半径，返回一个足够大的值
-    return desiredSpacing * nodeCount.coerceAtLeast(1).toFloat().let { sqrt(it) * 2f }
-}
-
-/**
- * 力导向布局算法（简化版 ForceAtlas2）
- */
-private fun computeNodePositions(
-    nodes: List<MutualFriendData>,
-    selfId: String?,
-    layoutWidthPx: Float,
-    layoutHeightPx: Float,
-    mutualCounts: Map<String, Int>,
-    desiredSpacing: Float,
-    ringSpacing: Float,
-    edges: Map<String, List<String>> = emptyMap(),
-): Map<String, Offset> {
-    if (nodes.isEmpty()) return emptyMap()
-    val center = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
-    val n = nodes.size
-    val nodeIds = nodes.map { it.id }
-    val idx = nodeIds.mapIndexed { i, id -> id to i }.toMap()
-
-    // 构建邻接表
-    val adjacency = mutableMapOf<Int, MutableSet<Int>>()
-    for (node in nodes) {
-        val i = idx[node.id] ?: continue
-        adjacency.getOrPut(i) { mutableSetOf() }
-    }
-
-    // 初始化位置：随机散布在中心附近（紧凑）
-    val x = FloatArray(n)
-    val y = FloatArray(n)
-    val rng = kotlin.random.Random(42)
-    for (i in 0 until n) {
-        val angle = rng.nextFloat() * 2f * PI.toFloat()
-        val r = rng.nextFloat() * desiredSpacing * 0.3f
-        x[i] = center.x + r * cos(angle)
-        y[i] = center.y + r * sin(angle)
-    }
-
-    // 力导向迭代
-    val iterations = 500
-    val k = desiredSpacing * 1.5f // 理想距离（紧凑）
-    val gravity = 1.6f
-    val speed = 1f
-    val fx = FloatArray(n)
-    val fy = FloatArray(n)
-
-    for (iter in 0 until iterations) {
-        // 清零力
-        fx.fill(0f)
-        fy.fill(0f)
-
-        // 斥力：所有节点对之间
-        for (i in 0 until n) {
-            for (j in i + 1 until n) {
-                var dx = x[i] - x[j]
-                var dy = y[i] - y[j]
-                val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                val force = (k * k) / dist // 斥力与距离平方成反比
-                val fxij = (dx / dist) * force
-                val fyij = (dy / dist) * force
-                fx[i] += fxij; fy[i] += fyij
-                fx[j] -= fxij; fy[j] -= fyij
-            }
-        }
-
-        // 引力：连接的节点之间
-        for (i in 0 until n) {
-            val nodeId = nodeIds[i]
-            val neighbors = edges[nodeId].orEmpty()
-            for (neighborId in neighbors) {
-                val j = idx[neighborId] ?: continue
-                if (i >= j) continue // 避免重复计算
-                var dx = x[j] - x[i]
-                var dy = y[j] - y[i]
-                val dist = sqrt(dx * dx + dy * dy).coerceAtLeast(1f)
-                val force = (dist * dist) / k // 引力与距离平方成正比
-                val fxij = (dx / dist) * force
-                val fyij = (dy / dist) * force
-                fx[i] += fxij; fy[i] += fyij
-                fx[j] -= fxij; fy[j] -= fyij
-            }
-        }
-
-        // 重力：向中心吸引
-        for (i in 0 until n) {
-            val dx = center.x - x[i]
-            val dy = center.y - y[i]
-            fx[i] += dx * gravity
-            fy[i] += dy * gravity
-        }
-
-        // 更新位置（带速度限制）
-        val maxDisplacement = k * speed * (1f - iter.toFloat() / iterations)
-        for (i in 0 until n) {
-            val fMag = sqrt(fx[i] * fx[i] + fy[i] * fy[i]).coerceAtLeast(0.01f)
-            val disp = min(fMag, maxDisplacement)
-            x[i] += (fx[i] / fMag) * disp
-            y[i] += (fy[i] / fMag) * disp
-        }
-    }
-
-    return nodeIds.mapIndexed { i, id -> id to Offset(x[i], y[i]) }.toMap()
 }
 
 @OptIn(ExperimentalTime::class)
