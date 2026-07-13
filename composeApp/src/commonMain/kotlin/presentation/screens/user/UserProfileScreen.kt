@@ -74,6 +74,7 @@ data class UserProfileScreen(
         var bottomSheetIsVisible by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
         var openAlertDialog by remember { mutableStateOf(false) }
+        var openEditProfileDialog by remember { mutableStateOf(false) }
         // Control showing favorite group management for Friend type
         var showFriendFavoriteSheet by remember { mutableStateOf(false) }
         CompositionLocalProvider(LocalSharedSuffixKey provides sharedSuffixKey) {
@@ -105,6 +106,7 @@ data class UserProfileScreen(
                     if (!sheetState.isVisible) bottomSheetIsVisible = false
                 },
                 openAlertDialog = { openAlertDialog = true },
+                openEditProfileDialog = { openEditProfileDialog = true },
                 onManageFriendFavorite = { showFriendFavoriteSheet = true }
             )
         }
@@ -121,6 +123,25 @@ data class UserProfileScreen(
         ) {
             Text(text = userProfileScreenModel.userJson)
         }
+        // 编辑资料底部弹窗
+        val editSuccessMsg = strings.editProfileUpdateSuccess
+        EditProfileSheet(
+            isVisible = openEditProfileDialog,
+            currentUser = currentUser,
+            onDismiss = { openEditProfileDialog = false },
+            onStatusSave = { status, statusDescription ->
+                userProfileScreenModel.updateUserProfile(status = status, statusDescription = statusDescription, successMessage = editSuccessMsg)
+            },
+            onLanguageSave = { languages ->
+                userProfileScreenModel.updateUserProfile(languages = languages, successMessage = editSuccessMsg)
+            },
+            onPronounsSave = { pronouns ->
+                userProfileScreenModel.updateUserProfile(pronouns = pronouns, successMessage = editSuccessMsg)
+            },
+            onBioSave = { bio ->
+                userProfileScreenModel.updateUserProfile(bio = bio, successMessage = editSuccessMsg)
+            },
+        )
     }
 
 }
@@ -132,13 +153,21 @@ private fun ColumnScope.SheetItems(
     hideSheet: suspend () -> Unit,
     onHideCompletion: () -> Unit,
     openAlertDialog: () -> Unit,
+    openEditProfileDialog: () -> Unit,
     onManageFriendFavorite: () -> Unit,
 ) {
     val navigator = LocalNavigator.currentOrThrow
     val localeStrings = strings
     val scope = rememberCoroutineScope()
-    // 添加媒体库选项，只有当是自己的个人资料时才显示
+    // 只有当是自己的个人资料时才显示
     if (currentUser.isSelf) {
+
+        SheetButtonItem(text = localeStrings.profileEditProfile, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                openEditProfileDialog()
+            }
+        })
 
         SheetButtonItem(text = localeStrings.profileViewGallery, onClick = {
             scope.launch { hideSheet() }.invokeOnCompletion {

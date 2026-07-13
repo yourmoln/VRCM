@@ -10,6 +10,7 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.attributes.BlueprintType
 import io.github.vrcmteam.vrcm.network.api.attributes.LocationType
 import io.github.vrcmteam.vrcm.network.api.attributes.NotificationType
+import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
 import io.github.vrcmteam.vrcm.network.api.instances.InstancesApi
@@ -17,6 +18,7 @@ import io.github.vrcmteam.vrcm.network.api.notification.NotificationApi
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
+import network.api.users.data.UpdateUserInfoData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.HomeInstanceVo
@@ -74,6 +76,56 @@ class UserProfileScreenModel(
             }
         }
 
+    fun updateUserProfile(
+        bio: String? = null,
+        bioLinks: List<String>? = null,
+        status: UserStatus? = null,
+        statusDescription: String? = null,
+        pronouns: String? = null,
+        languages: List<String>? = null,
+        successMessage: String = "Profile updated",
+    ) {
+        screenModelScope.launch(Dispatchers.IO) {
+            // 更新基本信息
+            authService.reTryAuthCatching {
+                usersApi.updateUserInfo(
+                    userId = userState.id,
+                    updateUserInfoData = UpdateUserInfoData(
+                        bio = bio,
+                        bioLinks = bioLinks,
+                        status = status,
+                        statusDescription = statusDescription,
+                        pronouns = pronouns,
+                    )
+                )
+            }.onFailure {
+                handleError(it)
+            }
+
+            // 更新语言 tags
+            if (languages != null) {
+                val currentLangs = userState.tags
+                    .filter { it.startsWith("language_") }
+                    .map { it.removePrefix("language_") }
+                val toAdd = languages.filter { it !in currentLangs }
+                val toRemove = currentLangs.filter { it !in languages }
+
+                if (toAdd.isNotEmpty()) {
+                    authService.reTryAuthCatching {
+                        usersApi.addTags(userState.id, toAdd.map { "language_$it" })
+                    }
+                }
+                if (toRemove.isNotEmpty()) {
+                    authService.reTryAuthCatching {
+                        usersApi.removeTags(userState.id, toRemove.map { "language_$it" })
+                    }
+                }
+            }
+
+            SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
+            refreshUser(userState.id)
+        }
+    }
 
     suspend fun sendFriendRequest(userId: String, message: String): Boolean =
         friendAction(message) {

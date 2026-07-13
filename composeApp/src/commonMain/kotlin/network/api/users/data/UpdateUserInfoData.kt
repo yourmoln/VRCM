@@ -11,6 +11,7 @@ data class UpdateUserInfoData(
     val bioLinks: List<String>? = null,
     val status: UserStatus? = null,
     val statusDescription: String? = null,
+    val pronouns: String? = null,
     val userIcon: String? = null,
     val email: String? = null,
     val password: String? = null,
