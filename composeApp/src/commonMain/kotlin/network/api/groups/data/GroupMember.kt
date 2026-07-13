@@ -22,7 +22,7 @@ data class GroupMemberLimitedUser(
     override val id: String = "",
     override val displayName: String = "",
     @SerialName("iconUrl")
-    val _iconUrl: String? = null,
+    val _iconUrl: String = "",
     val thumbnailUrl: String? = null,
     override val profilePicOverride: String = "",
     override val pronouns: String? = null,
@@ -43,5 +43,5 @@ data class GroupMemberLimitedUser(
     override val developerType: String = "",
 ) : IUser {
     override val iconUrl: String
-        get() = _iconUrl ?: thumbnailUrl ?: profilePicOverride.ifBlank { currentAvatarImageUrl }
+        get() = _iconUrl.ifBlank { thumbnailUrl ?: profilePicOverride.ifBlank { currentAvatarImageUrl } }
 }
