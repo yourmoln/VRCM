@@ -35,6 +35,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -68,6 +69,9 @@ import cafe.adriel.voyager.koin.koinScreenModel
 import io.github.vrcmteam.vrcm.network.api.groups.data.Gallery
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupGalleryImage
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupMember
+import io.github.vrcmteam.vrcm.network.api.groups.data.GroupPost
+import io.github.vrcmteam.vrcm.network.api.groups.data.Role
+import io.github.vrcmteam.vrcm.network.api.instances.data.InstanceData
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
 import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
@@ -78,6 +82,7 @@ import io.github.vrcmteam.vrcm.presentation.compoments.LocalSharedTransitionDial
 import io.github.vrcmteam.vrcm.presentation.compoments.LoadingButton
 import io.github.vrcmteam.vrcm.presentation.compoments.LocalSharedSuffixKey
 import io.github.vrcmteam.vrcm.presentation.compoments.LocationDialogContent
+import io.github.vrcmteam.vrcm.presentation.compoments.RegionIcon
 import io.github.vrcmteam.vrcm.presentation.compoments.TextChip
 import io.github.vrcmteam.vrcm.presentation.compoments.TextLabel
 import io.github.vrcmteam.vrcm.presentation.compoments.sharedBoundsBy
@@ -92,6 +97,8 @@ import io.github.vrcmteam.vrcm.presentation.screens.user.LinksRow
 import io.github.vrcmteam.vrcm.presentation.screens.user.LanguagesRow
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
+import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.world.data.WorldProfileVo
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import presentation.compoments.TopMenuBar
@@ -110,6 +117,10 @@ class GroupProfileScreen(
         val members by screenModel.members.collectAsState()
         val owner by screenModel.owner.collectAsState()
         val galleryImages by screenModel.galleryImages.collectAsState()
+        val posts by screenModel.posts.collectAsState()
+        val postAuthors by screenModel.postAuthors.collectAsState()
+        val postsLoading by screenModel.postsLoading.collectAsState()
+        val groupInstances by screenModel.groupInstances.collectAsState()
         val isActionLoading by screenModel.isActionLoading.collectAsState()
 
         LaunchedEffect(groupProfileVo.groupId) {
@@ -163,7 +174,7 @@ class GroupProfileScreen(
                                 )
                             },
                         ) {
-                            val tabs = listOf(strings.groupTabDetails, strings.groupTabMembers, strings.groupTabGallery)
+                            val tabs = listOf(strings.groupTabDetails, strings.groupTabPosts, strings.groupTabMembers, strings.groupTabGallery)
                             tabs.forEachIndexed { index, title ->
                                 Tab(
                                     selected = selectedTabIndex == index,
@@ -173,8 +184,9 @@ class GroupProfileScreen(
                             }
                         }
                         when (selectedTabIndex) {
-                            0 -> DetailsContent(group = group, owner = owner)
-                            1 -> MembersContent(members = members)
+                            0 -> DetailsContent(group = group, owner = owner, instances = groupInstances)
+                            1 -> PostsContent(posts = posts, roles = group.roles, postAuthors = postAuthors, isLoading = postsLoading)
+                            2 -> MembersContent(members = members)
                             else -> GalleriesContent(group = group, galleryImages = galleryImages)
                         }
                         Spacer(modifier = Modifier.height(24.dp))
@@ -397,13 +409,17 @@ private fun lerp(start: Dp, end: Dp, fraction: Float): Dp =
     Dp(lerp(start.value, end.value, fraction))
 
 @Composable
-private fun DetailsContent(group: GroupProfileVo, owner: UserData?) {
+private fun DetailsContent(group: GroupProfileVo, owner: UserData?, instances: List<InstanceData>) {
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
+        if (instances.isNotEmpty()) {
+            GroupInstancesSection(instances = instances)
+        }
+
         OwnerCard(
             owner = owner,
             ownerId = group.ownerId,
@@ -495,6 +511,193 @@ private fun DetailsContent(group: GroupProfileVo, owner: UserData?) {
             TextSection(title = strings.groupRules, text = group.rules.orEmpty())
         }
 
+    }
+}
+
+@Composable
+private fun GroupInstancesSection(instances: List<InstanceData>) {
+    SectionCard(
+        title = "${strings.groupInstances} (${instances.size})",
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            instances.forEach { instance ->
+                GroupInstanceCard(instance = instance)
+            }
+        }
+    }
+}
+
+@Composable
+private fun GroupInstanceCard(instance: InstanceData) {
+    val currentNavigator = currentNavigator
+    val world = instance.world
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(MaterialTheme.shapes.medium)
+            .enableIf(world.id.isNotBlank()) {
+                clickable {
+                    currentNavigator push WorldProfileScreen(
+                        worldProfileVO = WorldProfileVo(
+                            worldId = world.id,
+                            worldName = world.name,
+                            worldImageUrl = world.imageUrl,
+                            worldDescription = world.description.orEmpty(),
+                            authorID = world.authorId,
+                            authorName = world.authorName,
+                        ),
+                    )
+                }
+            },
+        tonalElevation = (-1).dp,
+        shape = MaterialTheme.shapes.medium,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(80.dp)
+                .padding(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AImage(
+                modifier = Modifier
+                    .size(64.dp)
+                    .clip(RoundedCornerShape(12.dp)),
+                imageData = world.imageUrl,
+                contentDescription = "WorldImage"
+            )
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.SpaceBetween
+            ) {
+                Text(
+                    text = world.name.ifBlank { strings.unknown },
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    RegionIcon(
+                        size = 14.dp,
+                        region = instance.region
+                    )
+                    Text(
+                        text = instance.accessType.displayName,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                    Text(
+                        text = "#${instance.name}",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline
+                    )
+                }
+                Text(
+                    text = "${instance.nUsers}/${instance.capacity}",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PostsContent(
+    posts: List<GroupPost>,
+    roles: List<Role>,
+    postAuthors: Map<String, String>,
+    isLoading: Boolean = false
+) {
+    if (isLoading) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
+    if (posts.isEmpty()) {
+        EmptyState(
+            message = strings.groupNoPosts,
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 16.dp)
+        )
+        return
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        posts.forEach { post ->
+            PostCard(post = post, roles = roles, authorName = postAuthors[post.authorId])
+        }
+    }
+}
+
+@Composable
+private fun PostCard(post: GroupPost, roles: List<Role>, authorName: String? = null) {
+    SectionCard(
+        title = post.title.ifBlank { strings.unknown },
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (!post.imageUrl.isNullOrBlank()) {
+            AImage(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                imageData = post.imageUrl,
+                contentDescription = "PostImage"
+            )
+        }
+        if (post.text.isNotBlank()) {
+            SelectionContainer {
+                Text(
+                    text = post.text,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+            }
+        }
+        if (post.roleIds.isNotEmpty()) {
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                post.roleIds.forEach { roleId ->
+                    val roleName = roles.firstOrNull { it.id == roleId }?.name ?: roleId
+                    TextChip(text = roleName)
+                }
+            }
+        }
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            val displayAuthor = authorName ?: strings.loading
+            Text(
+                text = displayAuthor,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            if (!post.createdAt.isNullOrBlank()) {
+                Text(
+                    text = formatLocalTime(post.createdAt) ?: "",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
     }
 }
 

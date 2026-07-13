@@ -6,6 +6,8 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupGalleryImage
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupMember
+import io.github.vrcmteam.vrcm.network.api.groups.data.GroupPost
+import io.github.vrcmteam.vrcm.network.api.instances.data.InstanceData
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
@@ -38,6 +40,18 @@ class GroupProfileScreenModel(
     private val _galleryImages = MutableStateFlow<Map<String, List<GroupGalleryImage>>>(emptyMap())
     val galleryImages: StateFlow<Map<String, List<GroupGalleryImage>>> = _galleryImages.asStateFlow()
 
+    private val _posts = MutableStateFlow<List<GroupPost>>(emptyList())
+    val posts: StateFlow<List<GroupPost>> = _posts.asStateFlow()
+
+    private val _postAuthors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val postAuthors: StateFlow<Map<String, String>> = _postAuthors.asStateFlow()
+
+    private val _postsLoading = MutableStateFlow(false)
+    val postsLoading: StateFlow<Boolean> = _postsLoading.asStateFlow()
+
+    private val _groupInstances = MutableStateFlow<List<InstanceData>>(emptyList())
+    val groupInstances: StateFlow<List<InstanceData>> = _groupInstances.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -49,6 +63,10 @@ class GroupProfileScreenModel(
         _members.value = emptyList()
         _owner.value = null
         _galleryImages.value = emptyMap()
+        _posts.value = emptyList()
+        _postAuthors.value = emptyMap()
+        _postsLoading.value = false
+        _groupInstances.value = emptyList()
         val groupId = groupProfileVo.groupId
         if (_isLoading.value || groupId.isBlank()) return
         _isLoading.value = true
@@ -66,6 +84,8 @@ class GroupProfileScreenModel(
             }
             if (group != null) {
                 loadMembers(groupId)
+                loadPosts(groupId)
+                loadGroupInstances(groupId)
                 loadGalleryImages(groupId, group.galleries)
             }
             _isLoading.value = false
@@ -119,6 +139,42 @@ class GroupProfileScreenModel(
             usersApi.fetchUser(ownerId)
         }.onSuccess {
             _owner.value = it
+        }.onFailure {
+            logger.error(it.message.orEmpty())
+        }
+    }
+
+    private suspend fun loadPosts(groupId: String) {
+        _postsLoading.value = true
+        authService.reTryAuthCatching {
+            groupsApi.getGroupPosts(groupId = groupId, n = 100, offset = 0)
+        }.onSuccess { postData ->
+            _posts.value = postData.posts
+            val authorIds = postData.posts.mapNotNull { it.authorId.takeIf { id -> id.isNotBlank() } }.distinct()
+            val authorMap = mutableMapOf<String, String>()
+            authorIds.forEach { userId ->
+                authService.reTryAuthCatching {
+                    usersApi.fetchUser(userId)
+                }.onSuccess { user ->
+                    authorMap[userId] = user.displayName
+                }.onFailure {
+                    logger.error(it.message.orEmpty())
+                }
+            }
+            _postAuthors.value = authorMap
+        }.onFailure {
+            logger.error(it.message.orEmpty())
+        }
+        _postsLoading.value = false
+    }
+
+    private suspend fun loadGroupInstances(groupId: String) {
+        val userId = authService.currentUser().id
+        if (userId.isBlank()) return
+        authService.reTryAuthCatching {
+            groupsApi.getGroupInstances(userId = userId, groupId = groupId)
+        }.onSuccess {
+            _groupInstances.value = it.instances
         }.onFailure {
             logger.error(it.message.orEmpty())
         }

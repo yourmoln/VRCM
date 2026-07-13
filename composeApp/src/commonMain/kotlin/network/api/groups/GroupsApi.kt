@@ -3,7 +3,9 @@ package io.github.vrcmteam.vrcm.network.api.groups
 import io.github.vrcmteam.vrcm.network.api.attributes.GROUPS_API_PREFIX
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupData
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupGalleryImage
+import io.github.vrcmteam.vrcm.network.api.groups.data.GroupInstancesResponse
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupMember
+import io.github.vrcmteam.vrcm.network.api.groups.data.GroupPostData
 import io.github.vrcmteam.vrcm.network.api.groups.data.JoinGroupRequest
 import io.github.vrcmteam.vrcm.network.api.groups.data.LimitedGroup
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
@@ -72,5 +74,22 @@ class GroupsApi(private val client: HttpClient) {
             parameter("offset", offset)
             approved?.let { parameter("approved", it) }
         }.checkSuccess()
+
+    suspend fun getGroupPosts(
+        groupId: String,
+        n: Int = 100,
+        offset: Int = 0,
+    ): GroupPostData =
+        client.get("$GROUPS_API_PREFIX/$groupId/posts") {
+            parameter("n", n)
+            parameter("offset", offset)
+        }.checkSuccess()
+
+    suspend fun getGroupInstances(
+        userId: String,
+        groupId: String,
+    ): GroupInstancesResponse =
+        client.get("users/$userId/instances/groups/$groupId")
+            .checkSuccess()
 
 }
