@@ -4,14 +4,14 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 data class GroupPost(
-    val id: String = "",
-    val groupId: String = "",
-    val authorId: String = "",
+    val id: String,
+    val groupId: String,
+    val authorId: String,
     val editorId: String? = null,
-    val visibility: String = "",
+    val visibility: String,
     val roleIds: List<String> = emptyList(),
-    val title: String = "",
-    val text: String = "",
+    val title: String,
+    val text: String,
     val imageId: String? = null,
     val imageUrl: String? = null,
     val createdAt: String? = null,

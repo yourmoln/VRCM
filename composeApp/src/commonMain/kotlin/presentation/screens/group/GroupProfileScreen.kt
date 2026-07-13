@@ -684,7 +684,7 @@ private fun PostCard(post: GroupPost, roles: List<Role>, authorName: String? = n
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            val displayAuthor = authorName ?: strings.loading
+            val displayAuthor = authorName ?: strings.unknown
             Text(
                 text = displayAuthor,
                 style = MaterialTheme.typography.labelSmall,

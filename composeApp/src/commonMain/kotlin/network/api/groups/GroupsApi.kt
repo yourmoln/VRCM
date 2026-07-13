@@ -1,6 +1,7 @@
 package io.github.vrcmteam.vrcm.network.api.groups
 
 import io.github.vrcmteam.vrcm.network.api.attributes.GROUPS_API_PREFIX
+import io.github.vrcmteam.vrcm.network.api.attributes.USERS_API_PREFIX
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupData
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupGalleryImage
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupInstancesResponse
@@ -89,7 +90,7 @@ class GroupsApi(private val client: HttpClient) {
         userId: String,
         groupId: String,
     ): GroupInstancesResponse =
-        client.get("users/$userId/instances/groups/$groupId")
+        client.get("$USERS_API_PREFIX/$userId/instances/groups/$groupId")
             .checkSuccess()
 
 }

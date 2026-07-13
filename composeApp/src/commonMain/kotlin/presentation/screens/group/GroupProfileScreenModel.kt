@@ -15,10 +15,13 @@ import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.service.AuthService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
 import org.koin.core.logger.Logger
 
 class GroupProfileScreenModel(
@@ -83,10 +86,14 @@ class GroupProfileScreenModel(
                 loadOwner(group.ownerId)
             }
             if (group != null) {
-                loadMembers(groupId)
-                loadPosts(groupId)
-                loadGroupInstances(groupId)
-                loadGalleryImages(groupId, group.galleries)
+                coroutineScope {
+                    listOf(
+                        async { loadMembers(groupId) },
+                        async { loadPosts(groupId) },
+                        async { loadGroupInstances(groupId) },
+                        async { loadGalleryImages(groupId, group.galleries) }
+                    ).awaitAll()
+                }
             }
             _isLoading.value = false
         }
@@ -147,21 +154,37 @@ class GroupProfileScreenModel(
     private suspend fun loadPosts(groupId: String) {
         _postsLoading.value = true
         authService.reTryAuthCatching {
-            groupsApi.getGroupPosts(groupId = groupId, n = 100, offset = 0)
+            groupsApi.getGroupPosts(groupId = groupId, n = 20, offset = 0)
         }.onSuccess { postData ->
             _posts.value = postData.posts
-            val authorIds = postData.posts.mapNotNull { it.authorId.takeIf { id -> id.isNotBlank() } }.distinct()
+            // 先从已拉到的 members 中复用 displayName
+            val memberNames = _members.value.associate { it.userId to (it.user?.displayName ?: "") }
             val authorMap = mutableMapOf<String, String>()
-            authorIds.forEach { userId ->
-                authService.reTryAuthCatching {
-                    usersApi.fetchUser(userId)
-                }.onSuccess { user ->
-                    authorMap[userId] = user.displayName
-                }.onFailure {
-                    logger.error(it.message.orEmpty())
+            val missingIds = postData.posts
+                .mapNotNull { it.authorId.takeIf { id -> id.isNotBlank() } }
+                .distinct()
+                .filter { id ->
+                    memberNames[id]?.takeIf { it.isNotBlank() }?.let { name ->
+                        authorMap[id] = name
+                        false
+                    } ?: true
+                }
+            // 对缺失的作者名用有限并发请求（避免 429）
+            coroutineScope {
+                missingIds.chunked(5).forEach { chunk ->
+                    chunk.map { userId ->
+                        async {
+                            authService.reTryAuthCatching {
+                                usersApi.fetchUser(userId)
+                            }.getOrNull()?.displayName?.let { name -> userId to name }
+                        }
+                    }.awaitAll().forEach { result ->
+                        result?.let { (id, name) -> authorMap[id] = name }
+                    }
+                    // 增量更新 UI
+                    _postAuthors.value = authorMap.toMap()
                 }
             }
-            _postAuthors.value = authorMap
         }.onFailure {
             logger.error(it.message.orEmpty())
         }
