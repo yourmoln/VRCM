@@ -23,14 +23,12 @@ private const val MIN_ITERATIONS = 30
  *
  * @param nodeIds 节点 ID 列表
  * @param edges 邻接表，key 为节点 ID，value 为邻居节点 ID 列表
- * @param nodeSizePx 节点大小（像素）
  * @param desiredSpacing 节点间期望间距（像素）
  * @return 布局结果，包含每个节点的位置和画布尺寸
  */
 fun computeForceLayout(
     nodeIds: List<String>,
     edges: Map<String, List<String>>,
-    nodeSizePx: Float,
     desiredSpacing: Float,
 ): ForceLayoutResult {
     val n = nodeIds.size

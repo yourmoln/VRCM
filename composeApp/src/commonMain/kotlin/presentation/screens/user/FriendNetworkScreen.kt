@@ -56,6 +56,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import io.github.vrcmteam.vrcm.core.algorithms.ForceLayoutResult
 import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
 import io.github.vrcmteam.vrcm.presentation.compoments.ABottomSheet
 import io.github.vrcmteam.vrcm.presentation.compoments.UserStateIcon
@@ -81,8 +82,10 @@ object FriendNetworkScreen : Screen {
         var showSheet by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
 
+        val density = LocalDensity.current
+        val nodeSizePx = with(density) { (43.dp + 34.dp).toPx() }
         LaunchedEffect(Unit) {
-            model.loadCache()
+            model.loadCache(nodeSizePx)
         }
 
         val nodeMap = remember(state.nodes) { state.nodes.associateBy { it.id } }
@@ -117,7 +120,7 @@ object FriendNetworkScreen : Screen {
                     actions = {
                         IconButton(
                             enabled = !state.isLoading,
-                            onClick = { model.refresh() }
+                            onClick = { model.refresh(nodeSizePx) }
                         ) {
                             Icon(
                                 painter = rememberVectorPainter(AppIcons.Update),
@@ -150,11 +153,12 @@ object FriendNetworkScreen : Screen {
                             color = MaterialTheme.colorScheme.outline
                         )
                     } else if (state.layout != null) {
+                        val layout = state.layout
                         FriendNetworkGraph(
                             nodes = state.nodes,
                             edges = state.edges,
                             nodeColors = state.nodeColors,
-                            layout = state.layout!!,
+                            layout = layout,
                             highlightIds = highlightIds,
                             selectedId = selectedId,
                             highlightId = highlightId,
@@ -239,7 +243,7 @@ private fun FriendNetworkGraph(
     nodes: List<MutualFriendData>,
     edges: Map<String, List<String>>,
     nodeColors: Map<String, Color>,
-    layout: FriendNetworkLayoutResult,
+    layout: ForceLayoutResult,
     highlightIds: Set<String>,
     selectedId: String?,
     highlightId: String?,

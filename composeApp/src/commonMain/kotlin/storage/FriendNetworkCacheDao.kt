@@ -16,8 +16,9 @@ class FriendNetworkCacheDao(
     //引入base64防止中文存储过程中乱码
     fun load(userId: String): FriendNetworkCache? {
         val raw = settings.getStringOrNull(key(userId)) ?: return null
-        val decoded = Base64.decode(raw).decodeToString()
-        return runCatching { json.decodeFromString<FriendNetworkCache>(decoded) }.getOrNull()
+        return runCatching {
+            json.decodeFromString<FriendNetworkCache>(Base64.decode(raw).decodeToString())
+        }.getOrNull()
     }
 
     fun save(cache: FriendNetworkCache) {

@@ -7,6 +7,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
+import io.github.vrcmteam.vrcm.core.algorithms.ForceLayoutResult
 import io.github.vrcmteam.vrcm.core.algorithms.computeForceLayout
 import io.github.vrcmteam.vrcm.core.algorithms.louvainDetect
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
@@ -34,18 +35,12 @@ data class FriendNetworkProgress(
     val total: Int,
 )
 
-data class FriendNetworkLayoutResult(
-    val positions: Map<String, Offset>,
-    val layoutWidthPx: Float,
-    val layoutHeightPx: Float,
-)
-
 data class FriendNetworkUiState(
     val selfId: String? = null,
     val nodes: List<MutualFriendData> = emptyList(),
     val edges: Map<String, List<String>> = emptyMap(),
     val nodeColors: Map<String, Color> = emptyMap(),
-    val layout: FriendNetworkLayoutResult? = null,
+    val layout: ForceLayoutResult? = null,
     val updatedAt: Long? = null,
     val isFromCache: Boolean = false,
     val isLoading: Boolean = false,
@@ -73,9 +68,6 @@ class FriendNetworkScreenModel(
             Color(0xFF9A60B4),
             Color(0xFFEA7CCC),
         )
-
-        private const val BASE_NODE_SIZE_PX = 43f
-        private const val MAX_EXTRA_SIZE_PX = 34f
 
         /**
          * 社区颜色分配
@@ -114,20 +106,19 @@ class FriendNetworkScreenModel(
 
         /**
          * 力导向布局算法
+         * @param nodeSizePx 节点大小（像素），由 UI 层根据 density 计算
          */
         fun computeNodePositions(
             nodes: List<MutualFriendData>,
             edges: Map<String, List<String>>,
-        ): FriendNetworkLayoutResult {
-            if (nodes.isEmpty()) return FriendNetworkLayoutResult(emptyMap(), 0f, 0f)
-            val nodeSizePx = BASE_NODE_SIZE_PX + MAX_EXTRA_SIZE_PX
-            val result = computeForceLayout(
+            nodeSizePx: Float,
+        ): ForceLayoutResult {
+            if (nodes.isEmpty()) return ForceLayoutResult(emptyMap(), 0f, 0f)
+            return computeForceLayout(
                 nodeIds = nodes.map { it.id },
                 edges = edges,
-                nodeSizePx = nodeSizePx,
                 desiredSpacing = nodeSizePx * 1.3f,
             )
-            return FriendNetworkLayoutResult(result.positions, result.layoutWidthPx, result.layoutHeightPx)
         }
     }
 
@@ -147,7 +138,7 @@ class FriendNetworkScreenModel(
         return filteredNodes to filteredEdges
     }
 
-    fun loadCache() {
+    fun loadCache(nodeSizePx: Float) {
         screenModelScope.launch(Dispatchers.IO) {
             runCatching { authService.currentUser() }
                 .onSuccess { currentUser ->
@@ -155,7 +146,7 @@ class FriendNetworkScreenModel(
                     val selfId = cache.userId
                     val (filteredNodes, filteredEdges) = filterSelf(cache.nodes, cache.edges, selfId)
                     val nodeColors = assignCommunityColors(cache.nodes, cache.edges, selfId)
-                    val layout = computeLayout(filteredNodes, filteredEdges)
+                    val layout = computeLayout(filteredNodes, filteredEdges, nodeSizePx)
                     uiState = uiState.copy(
                         selfId = selfId,
                         nodes = filteredNodes,
@@ -173,7 +164,7 @@ class FriendNetworkScreenModel(
     }
 
     @OptIn(ExperimentalTime::class)
-    fun refresh() {
+    fun refresh(nodeSizePx: Float) {
         if (uiState.isLoading) return
         screenModelScope.launch(Dispatchers.IO) {
             uiState = uiState.copy(isLoading = true, progress = FriendNetworkProgress(0, 0))
@@ -228,7 +219,7 @@ class FriendNetworkScreenModel(
                 val selfId = currentUser.id
                 val (filteredNodes, filteredEdges) = filterSelf(nodes, finalEdges, selfId)
                 val nodeColors = assignCommunityColors(nodes, finalEdges, selfId)
-                val layout = computeLayout(filteredNodes, filteredEdges)
+                val layout = computeLayout(filteredNodes, filteredEdges, nodeSizePx)
                 uiState = FriendNetworkUiState(
                     selfId = selfId,
                     nodes = filteredNodes,
@@ -299,8 +290,9 @@ class FriendNetworkScreenModel(
     private suspend fun computeLayout(
         nodes: List<MutualFriendData>,
         edges: Map<String, List<String>>,
-    ): FriendNetworkLayoutResult = withContext(Dispatchers.Default) {
-        computeNodePositions(nodes, edges)
+        nodeSizePx: Float,
+    ): ForceLayoutResult = withContext(Dispatchers.Default) {
+        computeNodePositions(nodes, edges, nodeSizePx)
     }
 
     private fun CurrentUserData.toMutualFriendData(isFriend: Boolean) = MutualFriendData(
