@@ -3,6 +3,7 @@ package io.github.vrcmteam.vrcm.core.extensions
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.ExperimentalTime
 
 fun String.capitalizeFirst() = this.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
 
@@ -12,9 +13,11 @@ fun CharSequence.isDigitsOnly(): Boolean = this.all{ char -> char.isDigit() }
 fun String.omission(maxLength: Int)= this.takeIf { it.length < maxLength }
     ?: "${this.substring(0,maxLength)}..."
 
+@OptIn(ExperimentalTime::class)
 fun String.toLocalDateTime() =
     runCatching {  Instant.parse(this).toLocalDateTime(TimeZone.currentSystemDefault())}
         .getOrNull()
+@OptIn(ExperimentalTime::class)
 fun String.toLocalDate() =
     runCatching {  Instant.parse(this).toLocalDateTime(TimeZone.currentSystemDefault()).date }
         .getOrNull()

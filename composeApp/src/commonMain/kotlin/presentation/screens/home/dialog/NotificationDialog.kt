@@ -35,6 +35,7 @@ import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.ExperimentalTime
 
 object NotificationDialog : SharedDialog {
 
@@ -156,6 +157,7 @@ private fun LazyItemScope.NotificationItem(
                     )
                     Text(
                         text = remember {
+                            @OptIn(ExperimentalTime::class)
                             Instant.parse(item.createdAt).toLocalDateTime(TimeZone.currentSystemDefault()).ignoredFormat
                         },
                         style = MaterialTheme.typography.labelSmall,

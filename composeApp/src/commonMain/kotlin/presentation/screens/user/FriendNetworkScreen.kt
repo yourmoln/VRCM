@@ -65,6 +65,7 @@ import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
+import kotlin.time.ExperimentalTime
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.min
@@ -675,6 +676,7 @@ private fun computeNodePositions(
     return nodeIds.mapIndexed { i, id -> id to Offset(x[i], y[i]) }.toMap()
 }
 
+@OptIn(ExperimentalTime::class)
 private fun formatTimestamp(epochMillis: Long): String {
     val local = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
     val hour = local.hour.toString().padStart(2, '0')
