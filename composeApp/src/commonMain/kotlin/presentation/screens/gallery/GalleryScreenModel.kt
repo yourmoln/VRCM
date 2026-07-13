@@ -42,8 +42,8 @@ class GalleryScreenModel(
     }
 
     // 拍立得使用独立的 API (GET /prints/user/{userId})
-    private var _prints = mutableStateOf<List<PrintData>>(emptyList())
-    private var _isRefreshingPrints = mutableStateOf(false)
+    private val _prints = mutableStateOf<List<PrintData>>(emptyList())
+    private val _isRefreshingPrints = mutableStateOf(false)
 
     fun init() {
         refreshAllFiles()
@@ -98,9 +98,9 @@ class GalleryScreenModel(
         }
     }
 
-    fun getPrints(): List<PrintData> = _prints.value
+    val prints: List<PrintData> get() = _prints.value
 
-    fun isRefreshingPrints(): Boolean = _isRefreshingPrints.value
+    val isRefreshingPrints: Boolean get() = _isRefreshingPrints.value
 
     /**
      * 根据标签类型获取对应的文件列表

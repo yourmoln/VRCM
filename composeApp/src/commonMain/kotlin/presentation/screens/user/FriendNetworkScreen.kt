@@ -155,7 +155,6 @@ object FriendNetworkScreen : Screen {
                             edges = state.edges,
                             nodeColors = state.nodeColors,
                             layout = state.layout!!,
-                            selfId = null,
                             highlightIds = highlightIds,
                             selectedId = selectedId,
                             highlightId = highlightId,
@@ -241,7 +240,6 @@ private fun FriendNetworkGraph(
     edges: Map<String, List<String>>,
     nodeColors: Map<String, Color>,
     layout: FriendNetworkLayoutResult,
-    selfId: String?,
     highlightIds: Set<String>,
     selectedId: String?,
     highlightId: String?,
@@ -250,8 +248,10 @@ private fun FriendNetworkGraph(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val baseNodeSizePx = 43f
-        val maxExtraSizePx = 34f
+        val baseNodeSize = 43.dp
+        val maxExtraSize = 34.dp
+        val baseNodeSizePx = with(density) { baseNodeSize.toPx() }
+        val maxExtraSizePx = with(density) { maxExtraSize.toPx() }
         val labelWidth = 88.dp
         val labelWidthPx = with(density) { labelWidth.toPx() }
         val viewWidthPx = with(density) { maxWidth.toPx() }
@@ -266,7 +266,7 @@ private fun FriendNetworkGraph(
         ).coerceIn(minScale, 1.25f)
         var scale by remember(nodes.size, viewWidthPx, viewHeightPx) { mutableStateOf(initialScale) }
         var offset by remember(nodes.size, viewWidthPx, viewHeightPx) { mutableStateOf(Offset.Zero) }
-        var hasUserInteracted by remember(nodes.size, selfId) { mutableStateOf(false) }
+        var hasUserInteracted by remember(nodes.size) { mutableStateOf(false) }
         val edgeList = remember(edges) { buildEdgeList(edges) }
         // 计算每个节点的度数（连接数）
         val nodeDegree = remember(edges) { nodes.associate { it.id to edges[it.id].orEmpty().size } }
@@ -274,10 +274,7 @@ private fun FriendNetworkGraph(
         val positions = layout.positions
         val viewCenter = Offset(viewWidthPx / 2f, viewHeightPx / 2f)
         val layoutCenter = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
-        val centeredOffset = run {
-            val selfPos = selfId?.let { positions[it] } ?: layoutCenter
-            viewCenter - (selfPos * initialScale)
-        }
+        val centeredOffset = viewCenter - (layoutCenter * initialScale)
         val renderScale = if (hasUserInteracted) scale else initialScale
         val renderOffset = if (hasUserInteracted) offset else centeredOffset
         val defaultColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)

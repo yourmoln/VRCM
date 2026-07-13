@@ -21,8 +21,6 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.koin.koinScreenModel
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
@@ -52,85 +50,37 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
     override fun Content() {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
 
-        val navigator = LocalNavigator.currentOrThrow
-
-        // Print 使用独立的 API (GET /prints/user/{userId})
         val isPrint = tagType == FileTagType.Print
 
         RefreshBox(
-            isRefreshing = if (isPrint) galleryScreenModel.isRefreshingPrints() else galleryScreenModel.isRefreshingByTag(tagType),
+            isRefreshing = if (isPrint) galleryScreenModel.isRefreshingPrints else galleryScreenModel.isRefreshingByTag(tagType),
             doRefresh = { if (isPrint) galleryScreenModel.refreshPrints() else galleryScreenModel.refreshFiles(tagType) }
         ) {
             if (isPrint) {
-                // 拍立得使用 PrintData
-                val prints = galleryScreenModel.getPrints()
-                if (prints.isEmpty() && !galleryScreenModel.isRefreshingPrints()) {
-                    EmptyContent(
-                        message = strings.galleryTabNoFiles.replace("%s", title),
-                    )
-                } else {
-                    PrintGrid(prints)
-                }
+                PrintContent(galleryScreenModel)
             } else {
-            val files = galleryScreenModel.getFilesByTag(tagType)
-
-            if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
-                EmptyContent(
-                    message = strings.galleryTabNoFiles.replace("%s", title),
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // 如果是Gallery标签页，添加上传按钮
-//                    if (tagType == FileTagType.Gallery) {
-//                        // 上传按钮
-//                        Row(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .padding(horizontal = 16.dp, vertical = 8.dp),
-//                            horizontalArrangement = Arrangement.End
-//                        ) {
-//                            val coroutineScope = rememberCoroutineScope()
-//                            val platform = getAppPlatform()
-//
-//                            Button(
-//                                onClick = {
-//                                    coroutineScope.launch {
-//                                        // 从系统相册选择图片
-//                                        val imagePath = platform.selectImageFromGallery()
-//                                        if (imagePath != null) {
-//                                            // 打开图片编辑器进行裁剪
-//                                            navigator.push(
-//                                                ImageEditorScreen(
-//                                                    imagePath = imagePath,
-//                                                    fileTagType = tagType,
-//                                                ) { croppedImagePath ->
-//                                                    // 裁剪完成后上传图片
-//                                                    coroutineScope.launch {
-//                                                        SharedFlowCentre.toastText.emit(ToastText.Info("正在上传图片..."))
-//                                                        galleryScreenModel.uploadImage(croppedImagePath, tagType)
-//                                                    }
-//                                                }
-//                                            )
-//                                        }
-//                                    }
-//                                },
-//                                modifier = Modifier.padding(4.dp)
-//                            ) {
-//                                Icon(
-//                                    painter = rememberVectorPainter(AppIcons.SaveAlt),
-//                                    contentDescription = strings.galleryTabUploadImage,
-//                                    modifier = Modifier.size(20.dp)
-//                                )
-//                                Spacer(modifier = Modifier.width(4.dp))
-//                                Text(strings.galleryTabUploadImage)
-//                            }
-//                        }
-//                    }
-
-                    GalleryGrid(files, tagType)
-                }
+                FileContent(galleryScreenModel)
             }
-            } // end else (!isPrint)
+        }
+    }
+
+    @Composable
+    private fun PrintContent(galleryScreenModel: GalleryScreenModel) {
+        val prints = galleryScreenModel.prints
+        if (prints.isEmpty() && !galleryScreenModel.isRefreshingPrints) {
+            EmptyContent(message = strings.galleryTabNoFiles.replace("%s", title))
+        } else {
+            PrintGrid(prints)
+        }
+    }
+
+    @Composable
+    private fun FileContent(galleryScreenModel: GalleryScreenModel) {
+        val files = galleryScreenModel.getFilesByTag(tagType)
+        if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
+            EmptyContent(message = strings.galleryTabNoFiles.replace("%s", title))
+        } else {
+            GalleryGrid(files, tagType)
         }
     }
 
@@ -165,7 +115,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 .fillMaxSize()
                 .aspectRatio(16f / 9f),
         ) {
-            AnimatedVisibility(dialogContent == null || (dialogContent as ImagePreviewDialog).fileId != print.id) {
+            AnimatedVisibility(dialogContent == null || (dialogContent as? ImagePreviewDialog)?.fileId != print.id) {
                 CoilImage(
                     imageModel = { imageUrl },
                     imageOptions = ImageOptions(

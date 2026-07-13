@@ -35,6 +35,8 @@ private fun extractLanguages(tags: List<String>): List<String> =
 private fun UserStatus?.safeStatus(): UserStatus =
     if (this == null || this == UserStatus.Offline) UserStatus.Active else this
 
+private enum class EditField { Status, Language, Pronouns, Bio }
+
 private val STATUS_OPTIONS = listOf(
     UserStatus.JoinMe, UserStatus.Active, UserStatus.AskMe, UserStatus.Busy,
 )
@@ -61,7 +63,7 @@ fun EditProfileSheet(
 ) {
     if (!isVisible) return
 
-    var editingField by remember { mutableStateOf<String?>(null) }
+    var editingField by remember { mutableStateOf<EditField?>(null) }
     var status by remember { mutableStateOf(currentUser.status.safeStatus()) }
     var statusDescription by remember { mutableStateOf(currentUser.statusDescription) }
     var pronouns by remember { mutableStateOf(currentUser.pronouns) }
@@ -91,31 +93,32 @@ fun EditProfileSheet(
                     modifier = Modifier.padding(bottom = 16.dp)
                 )
                 ProfileFieldRow(strings.editProfileStatus, "${status.toLocalizedString()} $statusDescription".trim()) {
-                    editStatus = status; editStatusDesc = statusDescription; editingField = "status"
+                    editStatus = status; editStatusDesc = statusDescription; editingField = EditField.Status
                 }
                 ProfileFieldRow(strings.editProfileLanguage, languages.mapNotNull { c -> LANGUAGE_OPTIONS.find { it.first == c }?.second }.ifEmpty { listOf("—") }.joinToString(", ")) {
-                    editLanguages = languages; editingField = "language"
+                    editLanguages = languages; editingField = EditField.Language
                 }
                 ProfileFieldRow(strings.editProfilePronouns, pronouns.ifBlank { "—" }) {
-                    editPronouns = pronouns; editingField = "pronouns"
+                    editPronouns = pronouns; editingField = EditField.Pronouns
                 }
                 ProfileFieldRow(strings.editProfileBio, bio.ifBlank { "—" }.let { if (it.length > 60) it.take(60) + "…" else it }) {
-                    editBio = bio; editingField = "bio"
+                    editBio = bio; editingField = EditField.Bio
                 }
             } else {
                 when (editingField) {
-                    "status" -> EditStatusField(editStatus, editStatusDesc, { editStatus = it }, { editStatusDesc = it }, {
+                    EditField.Status -> EditStatusField(editStatus, editStatusDesc, { editStatus = it }, { editStatusDesc = it }, {
                         status = editStatus; statusDescription = editStatusDesc; onStatusSave(editStatus, editStatusDesc); editingField = null
                     }) { editingField = null }
-                    "language" -> EditLanguageField(editLanguages, { editLanguages = it }, {
+                    EditField.Language -> EditLanguageField(editLanguages, { editLanguages = it }, {
                         languages = editLanguages; onLanguageSave(editLanguages); editingField = null
                     }) { editingField = null }
-                    "pronouns" -> EditContentField(strings.editProfilePronouns, editPronouns, { editPronouns = it }, 32, 2, {
+                    EditField.Pronouns -> EditContentField(strings.editProfilePronouns, editPronouns, { editPronouns = it }, 32, 2, {
                         pronouns = editPronouns; onPronounsSave(editPronouns); editingField = null
                     }) { editingField = null }
-                    "bio" -> EditContentField(strings.editProfileBio, editBio, { editBio = it }, 512, 8, {
+                    EditField.Bio -> EditContentField(strings.editProfileBio, editBio, { editBio = it }, 512, 8, {
                         bio = editBio; onBioSave(editBio); editingField = null
                     }) { editingField = null }
+                    null -> {}
                 }
             }
         }
