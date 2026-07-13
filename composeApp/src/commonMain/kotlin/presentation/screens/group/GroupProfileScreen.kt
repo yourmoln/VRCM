@@ -133,7 +133,9 @@ class GroupProfileScreen(
                 val topBarHeight = 64.dp
                 val sysTopPadding = getInsetPadding(WindowInsets::getTop)
                 Box(
-                    modifier = Modifier.fillMaxSize()
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.surface)
                 ) {
                     Column(
                         modifier = Modifier
