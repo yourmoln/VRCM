@@ -567,7 +567,98 @@ private fun UserGroupsSection(
 }
 
 /**
- * 用户创建的世界列表组件（懒加载横向滚动）
+ * 区域标题（标题 + 可选计数）
+ */
+@Composable
+private fun SectionHeader(
+    title: String,
+    countText: String? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (countText != null) {
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 通用横向卡片列表（180×88，左侧图片 + 右侧标题/副标题）
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun <T> HorizontalCardRow(
+    items: List<T>,
+    key: (T) -> Any,
+    imageUrl: (T) -> String?,
+    title: (T) -> String,
+    subtitle: (T) -> String,
+    imageModifier: @Composable (T, Modifier) -> Modifier = { _, m -> m },
+    onClick: ((T) -> Unit)? = null,
+) {
+    LazyRow(
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(items, key = key) { item ->
+            Surface(
+                modifier = Modifier
+                    .width(180.dp)
+                    .height(88.dp)
+                    .clip(MaterialTheme.shapes.large)
+                    .then(if (onClick != null) Modifier.clickable { onClick(item) } else Modifier),
+                color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                contentColor = MaterialTheme.colorScheme.primary
+            ) {
+                Row(
+                    modifier = Modifier.padding(10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    AImage(
+                        modifier = imageModifier(
+                            item,
+                            Modifier
+                                .size(48.dp)
+                                .clip(MaterialTheme.shapes.medium)
+                        ),
+                        imageData = imageUrl(item),
+                    )
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = title(item),
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = subtitle(item),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 用户创建的世界列表组件
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
@@ -580,72 +671,24 @@ private fun UserCreatedWorldsSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = strings.userCreatedWorlds,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = strings.userCreatedWorldsCount.format(worlds.size),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(worlds, key = { it.id }) { world ->
-                Surface(
-                    modifier = Modifier
-                        .width(180.dp)
-                        .height(88.dp)
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable { onWorldClick(world) },
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AImage(
-                            modifier = Modifier
-                                .sharedBoundsBy("${world.id}WorldImage")
-                                .size(48.dp)
-                                .clip(MaterialTheme.shapes.medium),
-                            imageData = world.thumbnailImageUrl ?: world.imageUrl,
-                        )
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = world.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = "${world.publicOccupants ?: 0} 👤",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        SectionHeader(
+            title = strings.userCreatedWorlds,
+            countText = strings.userCreatedWorldsCount.replace("%d", "${worlds.size}")
+        )
+        HorizontalCardRow(
+            items = worlds,
+            key = { it.id },
+            imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+            title = { it.name },
+            subtitle = { "${it.publicOccupants ?: 0} 👤" },
+            imageModifier = { item, modifier -> modifier.sharedBoundsBy("${item.id}WorldImage") },
+            onClick = onWorldClick,
+        )
     }
 }
 
 /**
- * 用户创建的模型列表组件（懒加载横向滚动）
+ * 用户创建的模型列表组件
  */
 @Composable
 private fun UserCreatedAvatarsSection(
@@ -656,72 +699,23 @@ private fun UserCreatedAvatarsSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Text(
-                text = strings.userCreatedAvatars,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(
-                text = strings.userCreatedAvatarsCount.format(avatars.size),
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(avatars, key = { it.id }) { avatar ->
-                Surface(
-                    modifier = Modifier
-                        .width(180.dp)
-                        .height(88.dp)
-                        .clip(MaterialTheme.shapes.large),
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        AImage(
-                            modifier = Modifier
-                                .size(48.dp)
-                                .clip(MaterialTheme.shapes.medium),
-                            imageData = avatar.thumbnailImageUrl ?: avatar.imageUrl,
-                        )
-                        Column(
-                            modifier = Modifier.weight(1f),
-                            verticalArrangement = Arrangement.spacedBy(2.dp)
-                        ) {
-                            Text(
-                                text = avatar.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            Text(
-                                text = avatar.authorName,
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-        }
+        SectionHeader(
+            title = strings.userCreatedAvatars,
+            countText = strings.userCreatedAvatarsCount.replace("%d", "${avatars.size}")
+        )
+        HorizontalCardRow(
+            items = avatars,
+            key = { it.id },
+            imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+            title = { it.name },
+            subtitle = { it.authorName },
+        )
     }
 }
 
 /**
- * 用户收藏的世界列表组件（按分组显示，懒加载横向滚动）
+ * 用户收藏的世界列表组件（按分组显示）
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
 private fun UserFavoritedWorldsSection(
     groupedWorlds: List<Pair<String, List<FavoritedWorld>>>,
@@ -732,11 +726,7 @@ private fun UserFavoritedWorldsSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = strings.userFavoritedWorlds,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
+        SectionHeader(title = strings.userFavoritedWorlds)
         for ((groupName, worlds) in groupedWorlds) {
             if (worlds.isEmpty()) continue
             Column(
@@ -748,51 +738,14 @@ private fun UserFavoritedWorldsSection(
                     style = MaterialTheme.typography.titleSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    items(worlds, key = { it.id }) { world ->
-                        Surface(
-                            modifier = Modifier
-                                .width(180.dp)
-                                .height(88.dp)
-                                .clip(MaterialTheme.shapes.large)
-                                .clickable { onWorldClick(world) },
-                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                            contentColor = MaterialTheme.colorScheme.primary
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(10.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                AImage(
-                                    modifier = Modifier
-                                        .size(48.dp)
-                                        .clip(MaterialTheme.shapes.medium),
-                                    imageData = world.thumbnailImageUrl ?: world.imageUrl,
-                                )
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    Text(
-                                        text = world.name,
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${world.occupants ?: 0} 👤",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                HorizontalCardRow(
+                    items = worlds,
+                    key = { it.id },
+                    imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+                    title = { it.name },
+                    subtitle = { "${it.occupants ?: 0} 👤" },
+                    onClick = onWorldClick,
+                )
             }
         }
     }

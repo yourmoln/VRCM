@@ -75,7 +75,11 @@ class GroupProfileScreenModel(
         _membersLoading.value = true
         _groupInstances.value = emptyList()
         val groupId = groupProfileVo.groupId
-        if (_isLoading.value || groupId.isBlank()) return
+        if (_isLoading.value || groupId.isBlank()) {
+            _postsLoading.value = false
+            _membersLoading.value = false
+            return
+        }
         _isLoading.value = true
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
@@ -98,6 +102,9 @@ class GroupProfileScreenModel(
                         async { loadGalleryImages(groupId, group.galleries) }
                     ).awaitAll()
                 }
+            } else {
+                _postsLoading.value = false
+                _membersLoading.value = false
             }
             _isLoading.value = false
         }
@@ -136,6 +143,7 @@ class GroupProfileScreenModel(
     }
 
     private suspend fun loadMembers(groupId: String) {
+        _membersLoading.value = true
         authService.reTryAuthCatching {
             groupsApi.getGroupMembers(groupId = groupId, n = 24, offset = 0)
         }.onSuccess {

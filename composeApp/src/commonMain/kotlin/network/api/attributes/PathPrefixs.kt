@@ -30,6 +30,8 @@ internal const val FAVORITE_API_PREFIX = "favorite"
 
 internal const val AVATARS_API_PREFIX = "avatars"
 
+internal const val USER_NOTES_API_PREFIX = "userNotes"
+
 internal const val FAVORITES_API_PREFIX = "favorites"
 
 internal const val FAVORITE_LIMITS_API_SUFFIX = "favoritelimits"
