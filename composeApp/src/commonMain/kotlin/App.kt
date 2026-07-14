@@ -71,5 +71,5 @@ fun AnimatedContentTransitionScope<Screen>.selectTransition(navigator: Navigator
         isTransitioningOn<WorldProfileScreen, GroupProfileScreen>() -> slideScreenTransition(navigator, SlideOrientation.Horizontal)
         isTransitioningFromTo<HomeScreen, AuthAnimeScreen>() -> HomeToAuthAnimeTransition
         isTransitioningFromTo<AuthAnimeScreen, HomeScreen>() -> AuthAnimeToHomeTransition
-        else -> ContentTransform(EnterTransition.None, ExitTransition.None)
+        else -> slideScreenTransition(navigator, SlideOrientation.Horizontal)
     }

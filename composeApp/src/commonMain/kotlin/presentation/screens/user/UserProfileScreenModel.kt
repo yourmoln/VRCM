@@ -85,7 +85,6 @@ class UserProfileScreenModel(
 
     fun refreshUser(userId: String) =
         screenModelScope.launch(Dispatchers.IO) {
-            _userGroups.value = emptyList()
             authService.reTryAuthCatching {
                 usersApi.fetchUserResponse(userId)
             }.onFailure {
@@ -223,21 +222,27 @@ class UserProfileScreenModel(
      */
     fun loadCreatedWorlds(userId: String) {
         if (_isLoadingWorlds.value) return
+        if (_createdWorlds.value.isNotEmpty()) return
         _isLoadingWorlds.value = true
-        _createdWorlds.value = emptyList()
         screenModelScope.launch(Dispatchers.IO) {
             try {
-                val allWorlds = mutableListOf<WorldData>()
                 val isSelf = userState.isSelf
+                // 第一步：通过搜索API获取世界ID列表
+                val worldIds = mutableListOf<String>()
                 worldsApi.userWorldsFlow(
-                    userId = userId,
+                    user = if (isSelf) "me" else null,
+                    userId = if (isSelf) null else userId,
                     sort = "updated",
                     order = "descending",
                     releaseStatus = if (isSelf) "all" else "public",
-                    n = 50,
+                    n = 100,
                 ).collect { worldList ->
-                    allWorlds.addAll(worldList)
-                    _createdWorlds.value = allWorlds.toList()
+                    worldIds.addAll(worldList.map { it.id })
+                }
+                // 第二步：逐个获取完整世界详情（含 description）
+                if (worldIds.isNotEmpty()) {
+                    val fullWorlds = worldsApi.fetchWorldsByIds(worldIds)
+                    _createdWorlds.value = fullWorlds
                 }
             } catch (e: Exception) {
                 handleError(e)
@@ -253,8 +258,8 @@ class UserProfileScreenModel(
     fun loadCreatedAvatars() {
         if (_isLoadingAvatars.value) return
         if (!userState.isSelf) return
+        if (_createdAvatars.value.isNotEmpty()) return
         _isLoadingAvatars.value = true
-        _createdAvatars.value = emptyList()
         screenModelScope.launch(Dispatchers.IO) {
             try {
                 val allAvatars = mutableListOf<AvatarData>()

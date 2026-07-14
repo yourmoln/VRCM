@@ -1,14 +1,16 @@
 package io.github.vrcmteam.vrcm.presentation.screens.user
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.*
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -19,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -51,8 +54,11 @@ import io.github.vrcmteam.vrcm.presentation.supports.LanguageIcons
 import io.github.vrcmteam.vrcm.presentation.supports.WebIcons
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
+import io.github.vrcmteam.vrcm.presentation.extensions.getInsetPadding
 import io.github.vrcmteam.vrcm.network.api.worlds.data.FavoritedWorld
 import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.data.AvatarProfileVo
 import kotlinx.coroutines.launch
 import org.koin.core.parameter.parametersOf
 
@@ -443,6 +449,12 @@ private fun ColumnScope.ProfileContent(
         }
     }
 
+    // 个人简介
+    BottomCardTab(
+        bioMinHeight = contentMinHeight,
+        userProfileVO = currentUser
+    )
+
     UserGroupsSection(
         groups = userGroups,
         onGroupClick = { group ->
@@ -460,15 +472,10 @@ private fun ColumnScope.ProfileContent(
         }
     )
 
-    // 个人简介
-    BottomCardTab(
-        bioMinHeight = contentMinHeight,
-        userProfileVO = currentUser
-    )
-
     // 创建的世界（在个人简介下方）
     UserCreatedWorldsSection(
         worlds = createdWorlds,
+        sharedSuffixKey = sharedSuffixKey,
         onWorldClick = { world ->
             navigator push WorldProfileScreen(
                 worldProfileVO = WorldProfileVo(world),
@@ -487,6 +494,7 @@ private fun ColumnScope.ProfileContent(
     // 收藏的世界（在创建的模型下方）
     UserFavoritedWorldsSection(
         groupedWorlds = favoritedWorlds,
+        sharedSuffixKey = sharedSuffixKey,
         onWorldClick = { world ->
             navigator push WorldProfileScreen(
                 worldProfileVO = WorldProfileVo(worldId = world.id, worldName = world.name, worldImageUrl = world.imageUrl, thumbnailImageUrl = world.thumbnailImageUrl, authorName = world.authorName),
@@ -630,63 +638,309 @@ private fun rememberCardEntranceModifier(index: Int): Modifier {
 }
 
 /**
- * 通用横向卡片列表（180×88，左侧图片 + 右侧标题/副标题）
+ * 堆叠卡片列表：多卡片重叠效果，点击跳转新页面展开
+ * @param detailTitle 新页面标题
+ * @param onNavigateToDetail 点击堆叠卡片时跳转到详情页
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
 @Composable
-private fun <T> HorizontalCardRow(
+private fun <T> StackedLocationCardList(
     items: List<T>,
     key: (T) -> Any,
     imageUrl: (T) -> String?,
     title: (T) -> String,
     subtitle: (T) -> String,
+    detailTitle: String,
+    label: String? = null,
     imageModifier: @Composable (T, Modifier) -> Modifier = { _, m -> m },
-    onClick: ((T) -> Unit)? = null,
+    onClickItem: ((T) -> Unit)? = null,
+    onNavigateToDetail: (List<T>) -> Unit,
 ) {
-    LazyRow(
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    if (items.isEmpty()) return
+    val firstItem = items.first()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(128.dp)
+            .clip(MaterialTheme.shapes.large)
+            .then(rememberCardEntranceModifier(0))
+            .clickable {
+                if (items.size == 1) {
+                    onClickItem?.invoke(firstItem)
+                } else {
+                    onNavigateToDetail(items)
+                }
+            }
+    ) {
+        // 后方堆叠卡片（与 StackedCards 一致的堆叠方式）
+        val visibleCount = minOf(3, items.size)
+        for (i in visibleCount - 1 downTo 1) {
+            val baseOffset = 10.dp * i
+            val baseScale = 1f - (0.1f * i)
+            val baseAlpha = 1f - (0.25f * i)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(112.dp)
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer {
+                        translationY = -baseOffset.toPx()
+                        scaleX = baseScale
+                        scaleY = baseScale
+                        alpha = baseAlpha
+                    },
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {}
+        }
+
+        // 前方主卡片
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(112.dp)
+                .align(Alignment.BottomCenter),
+            tonalElevation = (-2).dp,
+            shape = MaterialTheme.shapes.large
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                AImage(
+                    modifier = imageModifier(
+                        firstItem,
+                        Modifier
+                            .sharedBoundsBy("${detailTitle}_${key(firstItem)}_StackedImage")
+                            .weight(0.5f)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 16.dp, topEnd = 8.dp,
+                                    bottomStart = 16.dp, bottomEnd = 8.dp
+                                )
+                            )
+                    ),
+                    imageData = imageUrl(firstItem),
+                    contentDescription = null
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(0.5f)
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Text(
+                        text = title(firstItem),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = subtitle(firstItem),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // 标签气泡（左上角）
+        if (label != null) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1
+                )
+            }
+        }
+
+        // 剩余数量指示器（底部右侧，与 StackedCards 一致）
+        if (items.size > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 12.dp, end = 16.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f),
+                        shape = CircleShape
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "+${items.size - 1}",
+                    color = MaterialTheme.colorScheme.onTertiary,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 详情页顶部栏：标题居中，配色与用户界面下拉状态一致
+ */
+@Composable
+private fun DetailTopBar(
+    title: String,
+    sysTopPadding: Dp,
+    onReturn: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = sysTopPadding)
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onReturn) {
+                Icon(
+                    imageVector = AppIcons.ArrowBackIosNew,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 16.dp)
+            )
+            Spacer(modifier = Modifier.weight(1f))
+            // 占位，保持标题居中
+            Spacer(modifier = Modifier.size(48.dp))
+        }
+    }
+}
+
+/**
+ * 卡片列表详情页（泛型）
+ */
+private class CardListDetailScreen<T>(
+    private val title: String,
+    private val items: List<T>,
+    private val itemKey: (T) -> Any,
+    private val imageUrl: (T) -> String?,
+    private val itemTitle: (T) -> String,
+    private val itemSubtitle: (T) -> String,
+    private val sectionKey: String,
+    private val onClickItem: (T) -> Unit,
+) : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = currentNavigator
+        val sysTopPadding = getInsetPadding(WindowInsets::getTop)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                DetailTopBar(
+                    title = title,
+                    sysTopPadding = sysTopPadding,
+                    onReturn = { navigator.pop() }
+                )
+                CardListContent(
+                    items = items,
+                    key = itemKey,
+                    imageUrl = imageUrl,
+                    itemTitle = itemTitle,
+                    itemSubtitle = itemSubtitle,
+                    sectionKey = sectionKey,
+                    onClickItem = onClickItem
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 卡片列表详情页通用内容
+ */
+@Composable
+private fun <T> CardListContent(
+    items: List<T>,
+    key: (T) -> Any,
+    imageUrl: (T) -> String?,
+    itemTitle: (T) -> String,
+    itemSubtitle: (T) -> String,
+    sectionKey: String = "",
+    onClickItem: ((T) -> Unit)? = null,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp, end = 16.dp,
+            top = 8.dp, bottom = getInsetPadding(12, WindowInsets::getBottom) + 16.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(items, key = key) { item ->
-            val index = items.indexOfFirst { key(it) == key(item) }
-            val entranceModifier = rememberCardEntranceModifier(index)
             Surface(
-                modifier = entranceModifier
-                    .width(180.dp)
-                    .height(88.dp)
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(108.dp)
                     .clip(MaterialTheme.shapes.large)
-                    .then(if (onClick != null) Modifier.clickable { onClick(item) } else Modifier),
-                color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                contentColor = MaterialTheme.colorScheme.primary
+                    .then(if (onClickItem != null) Modifier.clickable { onClickItem(item) } else Modifier),
+                tonalElevation = (-2).dp,
+                shape = MaterialTheme.shapes.large
             ) {
                 Row(
-                    modifier = Modifier.padding(10.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    modifier = Modifier.padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     AImage(
-                        modifier = imageModifier(
-                            item,
-                            Modifier
-                                .size(48.dp)
-                                .clip(MaterialTheme.shapes.medium)
-                        ),
+                        modifier = Modifier
+                            .sharedBoundsBy("${sectionKey}_${key(item)}_StackedImage")
+                            .weight(0.4f)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 16.dp, topEnd = 8.dp,
+                                    bottomStart = 16.dp, bottomEnd = 8.dp
+                                )
+                            ),
                         imageData = imageUrl(item),
+                        contentDescription = null
                     )
                     Column(
-                        modifier = Modifier.weight(1f),
-                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                        modifier = Modifier
+                            .weight(0.6f)
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Text(
-                            text = title(item),
-                            style = MaterialTheme.typography.bodyMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis
+                            text = itemTitle(item),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.primary
                         )
                         Text(
-                            text = subtitle(item),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
+                            text = itemSubtitle(item),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -702,25 +956,43 @@ private fun <T> HorizontalCardRow(
 @Composable
 private fun UserCreatedWorldsSection(
     worlds: List<WorldData>,
+    sharedSuffixKey: String = "",
     onWorldClick: (WorldData) -> Unit,
 ) {
     if (worlds.isEmpty()) return
+    val navigator = currentNavigator
+    val createdWorldsTitle = strings.userCreatedWorlds
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SectionHeader(
-            title = strings.userCreatedWorlds,
-            countText = strings.userCreatedWorldsCount.replace("%d", "${worlds.size}")
-        )
-        HorizontalCardRow(
+        SectionHeader(title = createdWorldsTitle)
+        StackedLocationCardList(
             items = worlds,
             key = { it.id },
             imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
             title = { it.name },
-            subtitle = { "${it.publicOccupants ?: 0} 👤" },
+            subtitle = { it.description ?: "" },
+            detailTitle = createdWorldsTitle,
             imageModifier = { item, modifier -> modifier.sharedBoundsBy("${item.id}WorldImage") },
-            onClick = onWorldClick,
+            onClickItem = onWorldClick,
+            onNavigateToDetail = { list ->
+                navigator push CardListDetailScreen(
+                    title = createdWorldsTitle,
+                    items = list,
+                    itemKey = { it.id },
+                    imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+                    itemTitle = { it.name },
+                    itemSubtitle = { it.description ?: "" },
+                    sectionKey = createdWorldsTitle,
+                    onClickItem = { w ->
+                        navigator push WorldProfileScreen(
+                            worldProfileVO = WorldProfileVo(w),
+                            sharedSuffixKey = sharedSuffixKey
+                        )
+                    }
+                )
+            }
         )
     }
 }
@@ -733,20 +1005,36 @@ private fun UserCreatedAvatarsSection(
     avatars: List<AvatarData>,
 ) {
     if (avatars.isEmpty()) return
+    val navigator = currentNavigator
+    val createdAvatarsTitle = strings.userCreatedAvatars
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
-        SectionHeader(
-            title = strings.userCreatedAvatars,
-            countText = strings.userCreatedAvatarsCount.replace("%d", "${avatars.size}")
-        )
-        HorizontalCardRow(
+        SectionHeader(title = createdAvatarsTitle)
+        StackedLocationCardList(
             items = avatars,
             key = { it.id },
             imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
             title = { it.name },
-            subtitle = { it.authorName },
+            subtitle = { it.description ?: it.authorName },
+            detailTitle = createdAvatarsTitle,
+            onNavigateToDetail = { list ->
+                navigator push CardListDetailScreen(
+                    title = createdAvatarsTitle,
+                    items = list,
+                    itemKey = { it.id },
+                    imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+                    itemTitle = { it.name },
+                    itemSubtitle = { it.description?.takeIf { d -> d.isNotBlank() } ?: it.authorName },
+                    sectionKey = createdAvatarsTitle,
+                    onClickItem = { avatar ->
+                        navigator push AvatarProfileScreen(
+                            avatarProfileVo = AvatarProfileVo(avatar)
+                        )
+                    }
+                )
+            }
         )
     }
 }
@@ -757,9 +1045,11 @@ private fun UserCreatedAvatarsSection(
 @Composable
 private fun UserFavoritedWorldsSection(
     groupedWorlds: List<Pair<String, List<FavoritedWorld>>>,
+    sharedSuffixKey: String = "",
     onWorldClick: (FavoritedWorld) -> Unit,
 ) {
     if (groupedWorlds.isEmpty()) return
+    val navigator = currentNavigator
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -771,18 +1061,36 @@ private fun UserFavoritedWorldsSection(
                 modifier = Modifier.fillMaxWidth(),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                Text(
-                    text = groupName,
-                    style = MaterialTheme.typography.titleSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                HorizontalCardRow(
+                StackedLocationCardList(
                     items = worlds,
                     key = { it.id },
                     imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
                     title = { it.name },
-                    subtitle = { "${it.occupants ?: 0} 👤" },
-                    onClick = onWorldClick,
+                    subtitle = { it.description?.takeIf { d -> d.isNotBlank() } ?: "${it.occupants ?: 0} 👤" },
+                    detailTitle = groupName,
+                    label = groupName,
+                    onClickItem = onWorldClick,
+                    onNavigateToDetail = { list ->
+                        navigator push CardListDetailScreen(
+                            title = groupName,
+                            items = list,
+                            itemKey = { it.id },
+                            imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+                            itemTitle = { it.name },
+                            itemSubtitle = { it.description?.takeIf { d -> d.isNotBlank() } ?: "${it.occupants ?: 0} 👤" },
+                            sectionKey = groupName,
+                            onClickItem = { w ->
+                                navigator push WorldProfileScreen(
+                                    worldProfileVO = WorldProfileVo(
+                                        worldId = w.id, worldName = w.name,
+                                        worldImageUrl = w.imageUrl, thumbnailImageUrl = w.thumbnailImageUrl,
+                                        authorName = w.authorName
+                                    ),
+                                    sharedSuffixKey = sharedSuffixKey
+                                )
+                            }
+                        )
+                    }
                 )
             }
         }

@@ -219,6 +219,14 @@ data class LocaleStrings(
     val userCreatedLoading: String = "Loading...",
     val userCreatedEmpty: String = "No items",
     val userFavoritedWorlds: String = "Favorited Worlds",
+
+    // Avatar Profile
+    val avatarProfileRating: String = "Rating",
+    val avatarProfileVersion: String = "Version",
+    val avatarProfileStatus: String = "Status",
+    val avatarProfileCreated: String = "Created",
+    val avatarProfileUpdated: String = "Updated",
+    val avatarProfilePlatforms: String = "Platforms",
 )
 
 val strings: LocaleStrings

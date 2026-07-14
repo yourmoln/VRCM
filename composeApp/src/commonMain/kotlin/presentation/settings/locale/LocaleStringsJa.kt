@@ -213,5 +213,13 @@ internal val LocaleStringsJa = LocaleStrings(
     userCreatedAvatarsCount = "アバター: %d",
     userCreatedLoading = "読み込み中...",
     userCreatedEmpty = "アイテムなし",
-    userFavoritedWorlds = "お気に入りワールド",
+    userFavoritedWorlds = "お気に入りのワールド",
+
+    // Avatar Profile
+    avatarProfileRating = "評価",
+    avatarProfileVersion = "バージョン",
+    avatarProfileStatus = "ステータス",
+    avatarProfileCreated = "作成日",
+    avatarProfileUpdated = "更新日",
+    avatarProfilePlatforms = "対応プラットフォーム",
 )

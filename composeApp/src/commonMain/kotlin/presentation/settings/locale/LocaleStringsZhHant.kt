@@ -214,4 +214,12 @@ internal val LocaleStringsZhHant = LocaleStrings(
     userCreatedLoading = "載入中...",
     userCreatedEmpty = "暫無內容",
     userFavoritedWorlds = "收藏的世界",
+
+    // Avatar Profile
+    avatarProfileRating = "評級",
+    avatarProfileVersion = "版本",
+    avatarProfileStatus = "狀態",
+    avatarProfileCreated = "建立時間",
+    avatarProfileUpdated = "更新時間",
+    avatarProfilePlatforms = "支援平台",
 )
