@@ -120,6 +120,7 @@ class GroupProfileScreen(
         val posts by screenModel.posts.collectAsState()
         val postAuthors by screenModel.postAuthors.collectAsState()
         val postsLoading by screenModel.postsLoading.collectAsState()
+        val membersLoading by screenModel.membersLoading.collectAsState()
         val groupInstances by screenModel.groupInstances.collectAsState()
         val isActionLoading by screenModel.isActionLoading.collectAsState()
 
@@ -186,7 +187,7 @@ class GroupProfileScreen(
                         when (selectedTabIndex) {
                             0 -> DetailsContent(group = group, owner = owner, instances = groupInstances)
                             1 -> PostsContent(posts = posts, roles = group.roles, postAuthors = postAuthors, isLoading = postsLoading)
-                            2 -> MembersContent(members = members)
+                            2 -> MembersContent(members = members, isLoading = membersLoading)
                             else -> GalleriesContent(group = group, galleryImages = galleryImages)
                         }
                         Spacer(modifier = Modifier.height(24.dp))
@@ -702,9 +703,19 @@ private fun PostCard(post: GroupPost, roles: List<Role>, authorName: String? = n
 }
 
 @Composable
-private fun MembersContent(members: List<GroupMember>) {
+private fun MembersContent(members: List<GroupMember>, isLoading: Boolean = false) {
     val currentNavigator = currentNavigator
     val users = remember(members) { members.mapNotNull { it.user } }
+
+    if (isLoading) {
+        Box(
+            modifier = Modifier.fillMaxWidth().padding(vertical = 32.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            CircularProgressIndicator()
+        }
+        return
+    }
 
     if (users.isEmpty()) {
         EmptyState(

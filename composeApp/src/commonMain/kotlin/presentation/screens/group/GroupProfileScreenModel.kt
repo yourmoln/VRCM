@@ -52,6 +52,9 @@ class GroupProfileScreenModel(
     private val _postsLoading = MutableStateFlow(false)
     val postsLoading: StateFlow<Boolean> = _postsLoading.asStateFlow()
 
+    private val _membersLoading = MutableStateFlow(false)
+    val membersLoading: StateFlow<Boolean> = _membersLoading.asStateFlow()
+
     private val _groupInstances = MutableStateFlow<List<InstanceData>>(emptyList())
     val groupInstances: StateFlow<List<InstanceData>> = _groupInstances.asStateFlow()
 
@@ -68,7 +71,8 @@ class GroupProfileScreenModel(
         _galleryImages.value = emptyMap()
         _posts.value = emptyList()
         _postAuthors.value = emptyMap()
-        _postsLoading.value = false
+        _postsLoading.value = true
+        _membersLoading.value = true
         _groupInstances.value = emptyList()
         val groupId = groupProfileVo.groupId
         if (_isLoading.value || groupId.isBlank()) return
@@ -139,6 +143,7 @@ class GroupProfileScreenModel(
         }.onFailure {
             logger.error(it.message.orEmpty())
         }
+        _membersLoading.value = false
     }
 
     private suspend fun loadOwner(ownerId: String) {
