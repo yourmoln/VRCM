@@ -2,6 +2,9 @@ package io.github.vrcmteam.vrcm.presentation.screens.user
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -11,8 +14,10 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -511,8 +516,10 @@ private fun UserGroupsSection(
             horizontalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             items(groups, key = { it.groupId }) { group ->
+                val index = groups.indexOfFirst { it.groupId == group.groupId }
+                val entranceModifier = rememberCardEntranceModifier(index)
                 Surface(
-                    modifier = Modifier
+                    modifier = entranceModifier
                         .width(180.dp)
                         .height(88.dp)
                         .clip(MaterialTheme.shapes.large)
@@ -594,6 +601,35 @@ private fun SectionHeader(
 }
 
 /**
+ * 卡片入场动画修饰符：淡入 + 向上滑入，根据 index 错开延迟
+ */
+@Composable
+private fun rememberCardEntranceModifier(index: Int): Modifier {
+    val alpha = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(24f) }
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(index * 60L)
+        kotlinx.coroutines.coroutineScope {
+            launch {
+                alpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                offsetY.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+    }
+    return Modifier
+        .alpha(alpha.value)
+        .graphicsLayer { translationY = offsetY.value }
+}
+
+/**
  * 通用横向卡片列表（180×88，左侧图片 + 右侧标题/副标题）
  */
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -611,8 +647,10 @@ private fun <T> HorizontalCardRow(
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         items(items, key = key) { item ->
+            val index = items.indexOfFirst { key(it) == key(item) }
+            val entranceModifier = rememberCardEntranceModifier(index)
             Surface(
-                modifier = Modifier
+                modifier = entranceModifier
                     .width(180.dp)
                     .height(88.dp)
                     .clip(MaterialTheme.shapes.large)
