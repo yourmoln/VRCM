@@ -157,21 +157,13 @@ class GroupProfileScreenModel(
             groupsApi.getGroupPosts(groupId = groupId, n = 20, offset = 0)
         }.onSuccess { postData ->
             _posts.value = postData.posts
-            // 先从已拉到的 members 中复用 displayName
-            val memberNames = _members.value.associate { it.userId to (it.user?.displayName ?: "") }
             val authorMap = mutableMapOf<String, String>()
-            val missingIds = postData.posts
+            val authorIds = postData.posts
                 .mapNotNull { it.authorId.takeIf { id -> id.isNotBlank() } }
                 .distinct()
-                .filter { id ->
-                    memberNames[id]?.takeIf { it.isNotBlank() }?.let { name ->
-                        authorMap[id] = name
-                        false
-                    } ?: true
-                }
-            // 对缺失的作者名用有限并发请求（避免 429）
+            // 用有限并发请求获取作者名（避免 429）
             coroutineScope {
-                missingIds.chunked(5).forEach { chunk ->
+                authorIds.chunked(5).forEach { chunk ->
                     chunk.map { userId ->
                         async {
                             authService.reTryAuthCatching {
