@@ -75,6 +75,7 @@ data class UserProfileScreen(
         val sheetState = rememberModalBottomSheetState()
         var openAlertDialog by remember { mutableStateOf(false) }
         var openEditProfileDialog by remember { mutableStateOf(false) }
+        var openEditNoteDialog by remember { mutableStateOf(false) }
         // Control showing favorite group management for Friend type
         var showFriendFavoriteSheet by remember { mutableStateOf(false) }
         CompositionLocalProvider(LocalSharedSuffixKey provides sharedSuffixKey) {
@@ -89,7 +90,7 @@ data class UserProfileScreen(
                     currentUser = currentUser,
                     friendLocation = userProfileScreenModel.friendLocation,
                     userGroups = userGroups,
-                    ratio = ratio
+                    ratio = ratio,
                 )
             }
         }
@@ -107,7 +108,8 @@ data class UserProfileScreen(
                 },
                 openAlertDialog = { openAlertDialog = true },
                 openEditProfileDialog = { openEditProfileDialog = true },
-                onManageFriendFavorite = { showFriendFavoriteSheet = true }
+                onManageFriendFavorite = { showFriendFavoriteSheet = true },
+                openEditNoteDialog = { openEditNoteDialog = true }
             )
         }
         // Friend FavoriteType group management bottom sheet
@@ -142,6 +144,17 @@ data class UserProfileScreen(
                 userProfileScreenModel.updateUserProfile(bio = bio, successMessage = editSuccessMsg)
             },
         )
+        // 编辑备注弹窗
+        val noteSavedMsg = strings.userNoteSaved
+        EditNoteDialog(
+            isVisible = openEditNoteDialog,
+            initialNote = currentUser.note,
+            onDismiss = { openEditNoteDialog = false },
+            onSave = { note ->
+                userProfileScreenModel.saveUserNote(note, noteSavedMsg)
+                openEditNoteDialog = false
+            }
+        )
     }
 
 }
@@ -155,6 +168,7 @@ private fun ColumnScope.SheetItems(
     openAlertDialog: () -> Unit,
     openEditProfileDialog: () -> Unit,
     onManageFriendFavorite: () -> Unit,
+    openEditNoteDialog: () -> Unit,
 ) {
     val navigator = LocalNavigator.currentOrThrow
     val localeStrings = strings
@@ -184,6 +198,12 @@ private fun ColumnScope.SheetItems(
             scope.launch { hideSheet() }.invokeOnCompletion {
                 onHideCompletion()
                 onManageFriendFavorite()
+            }
+        })
+        SheetButtonItem(text = localeStrings.userNoteEditTitle, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                openEditNoteDialog()
             }
         })
     }
@@ -713,6 +733,53 @@ fun LinksRow(
                         contentDescription = "BioLinkIcon"
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditNoteDialog(
+    isVisible: Boolean,
+    initialNote: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    if (!isVisible) return
+    val localeStrings = strings
+    var noteText by remember { mutableStateOf(initialNote) }
+    val maxLen = 256
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            EditHeader(localeStrings.userNoteEditTitle, onDismiss)
+            OutlinedTextField(
+                value = noteText,
+                onValueChange = { if (it.length <= maxLen) noteText = it },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 8,
+                placeholder = {
+                    Text(
+                        localeStrings.userNoteEditTitle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
+                supportingText = { Text("${noteText.length}/$maxLen") },
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = { onSave(noteText) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(localeStrings.editProfileSave)
             }
         }
     }

@@ -191,6 +191,19 @@ class UserProfileScreenModel(
         }
     }
 
+    fun saveUserNote(note: String, successMessage: String) {
+        screenModelScope.launch(Dispatchers.IO) {
+            authService.reTryAuthCatching {
+                usersApi.saveUserNote(userState.id, note)
+            }.onFailure {
+                handleError(it)
+            }.onSuccess {
+                _userState.value = _userState.value.copy(note = note)
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
+            }
+        }
+    }
+
     fun computeFriendLocation(location: String) {
         val type = LocationType.fromValue(location)
         // 防止从用户详情页跳到世界页再点进非好友主页时 friendLocation 不刷新(按理来说看不到非好友位置)

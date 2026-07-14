@@ -102,7 +102,7 @@ internal val LocaleStringsZhHant = LocaleStrings(
     instanceCreateSuccessButInviteFailed = "創建房間成功，但邀請失敗",
     instanceCreateFailed = "創建房間失敗",
 
-    // 世界搜索相關
+    // World Search
     worldSearchAdvancedOptions = "高級搜索選項",
     worldSearchFeaturedOnly = "僅顯示精選世界",
     worldSearchSortBy = "排序方式",
@@ -112,7 +112,7 @@ internal val LocaleStringsZhHant = LocaleStrings(
     worldSearchResultCount = "顯示數量",
     worldSearchResultsFormat = "%d個結果",
 
-    // 排序選項
+    // Sort Options
     worldSearchSortPopularity = "流行度",
     worldSearchSortHeat = "熱度",
     worldSearchSortTrust = "信任度",
@@ -201,4 +201,8 @@ internal val LocaleStringsZhHant = LocaleStrings(
     groupLanguages = "語言",
     groupLinks = "連結",
     groupMembersTitle = "成員",
+
+    // User Note
+    userNoteEditTitle = "編輯備註",
+    userNoteSaved = "備註已保存",
 )

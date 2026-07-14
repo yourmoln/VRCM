@@ -142,7 +142,7 @@ private fun ProfileFieldRow(label: String, value: String, onClick: () -> Unit) {
 }
 
 @Composable
-private fun EditHeader(title: String, onBack: () -> Unit) {
+internal fun EditHeader(title: String, onBack: () -> Unit) {
     Row(Modifier.fillMaxWidth(), Arrangement.spacedBy(8.dp), Alignment.CenterVertically) {
         IconButton(onClick = onBack) { Icon(AppIcons.ExpandMore, "back", modifier = Modifier.rotate(90f)) }
         Text(title, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)

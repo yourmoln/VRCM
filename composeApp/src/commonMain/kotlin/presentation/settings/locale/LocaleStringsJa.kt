@@ -102,7 +102,7 @@ internal val LocaleStringsJa = LocaleStrings(
     instanceCreateSuccessButInviteFailed = "インスタンスは作成されましたが、招待に失敗しました",
     instanceCreateFailed = "インスタンス作成に失敗しました",
 
-    // 世界検索関連
+    // World Search
     worldSearchAdvancedOptions = "詳細検索オプション",
     worldSearchFeaturedOnly = "注目ワールドのみ表示",
     worldSearchSortBy = "並び順",
@@ -112,7 +112,7 @@ internal val LocaleStringsJa = LocaleStrings(
     worldSearchResultCount = "表示件数",
     worldSearchResultsFormat = "%d件の結果",
 
-    // 並べ替えオプション
+    // Sort Options
     worldSearchSortPopularity = "人気度",
     worldSearchSortHeat = "熱度",
     worldSearchSortTrust = "信頼度",
@@ -201,4 +201,8 @@ internal val LocaleStringsJa = LocaleStrings(
     groupLanguages = "言語",
     groupLinks = "リンク",
     groupMembersTitle = "メンバー",
+
+    // User Note
+    userNoteEditTitle = "メモを編集",
+    userNoteSaved = "メモを保存しました",
 )

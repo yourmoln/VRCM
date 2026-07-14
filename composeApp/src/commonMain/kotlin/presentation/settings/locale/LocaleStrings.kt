@@ -107,7 +107,7 @@ data class LocaleStrings(
     val instanceCreateSuccessButInviteFailed: String = "Instance created successfully but invite failed",
     val instanceCreateFailed: String = "Failed to create instance",
 
-    // 世界搜索相关
+    // World Search
     val worldSearchAdvancedOptions: String = "Advanced Search Options",
     val worldSearchFeaturedOnly: String = "Featured Worlds Only",
     val worldSearchSortBy: String = "Sort By",
@@ -117,7 +117,7 @@ data class LocaleStrings(
     val worldSearchResultCount: String = "Results Count",
     val worldSearchResultsFormat: String = "%d results",
 
-    // 排序选项
+    // Sort Options
     val worldSearchSortPopularity: String = "Popularity",
     val worldSearchSortHeat: String = "Heat",
     val worldSearchSortTrust: String = "Trust",
@@ -206,6 +206,10 @@ data class LocaleStrings(
     val groupLanguages: String = "Languages",
     val groupLinks: String = "Links",
     val groupMembersTitle: String = "Members",
+
+    // User Note
+    val userNoteEditTitle: String = "Edit Note",
+    val userNoteSaved: String = "Note saved",
 )
 
 val strings: LocaleStrings
