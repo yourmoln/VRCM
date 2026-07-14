@@ -46,6 +46,16 @@ import kotlin.math.roundToInt
 private const val ContactPointShape = 36
 
 /**
+ * 简介区域最小高度估算：为世界/模型等子区域预留的空间
+ */
+private val BioReservedHeight = 200.dp
+
+/**
+ * 简介区域最小高度下限
+ */
+private val BioMinHeightFloor = 120.dp
+
+/**
  * 详情页面脚手架
  * @param profileImageUrl 详情页背景图
  * @param iconUrl 详情页头像
@@ -60,7 +70,7 @@ fun ProfileScaffold(
     iconUrl: String?,
     onReturn: () -> Unit,
     onMenu:  (() -> Unit)? = null,
-    content: @Composable ColumnScope.(Float) -> Unit
+    content: @Composable ColumnScope.(Float, Dp) -> Unit
 ) {
     BoxWithConstraints {
         val scrollState = rememberScrollState()
@@ -115,6 +125,7 @@ fun ProfileScaffold(
             // 底部信息卡片
             BottomCard(
                 imageHeight,
+                maxHeight,
                 ratio,
                 topBarHeight,
                 sysTopPadding,
@@ -187,20 +198,15 @@ private fun ProfileImage(
 @Composable
 private fun BottomCard(
     imageHeight: Dp,
+    cardContentHeight: Dp,
     ratio: Float,
     topBarHeight: Dp,
     sysTopPadding: Dp,
     nestedScrollConnection: NestedScrollConnection,
-    content: @Composable ColumnScope.(Float) -> Unit
+    content: @Composable ColumnScope.(Float, Dp) -> Unit
 ) {
-    // image上滑反比例
     val inverseRatio = 1 - ratio
     val scrollState = rememberScrollState()
-    if (inverseRatio == 0f) {
-        LaunchedEffect(Unit) {
-            scrollState.animateScrollTo(0)
-        }
-    }
     Card(
         modifier = Modifier
             .fillMaxSize()
@@ -211,9 +217,13 @@ private fun BottomCard(
         ),
         colors = CardDefaults.cardColors(contentColor = MaterialTheme.colorScheme.primary)
     ) {
+        val spacerHeight = (topBarHeight + sysTopPadding) * inverseRatio
+        // 简介最小高度 = 卡片内容高度 - 间距高度 - 预留空间(给世界/模型等)
+        val bioMinHeight = (cardContentHeight - spacerHeight - BioReservedHeight).coerceAtLeast(BioMinHeightFloor)
         Column(
             modifier = Modifier
                 .nestedScroll(nestedScrollConnection)
+                .verticalScroll(scrollState)
                 .padding(
                     start = 12.dp,
                     end = 12.dp,
@@ -222,8 +232,8 @@ private fun BottomCard(
             verticalArrangement = Arrangement.spacedBy(8.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            Spacer(modifier = Modifier.height((topBarHeight + sysTopPadding) * inverseRatio))
-            content(ratio)
+            Spacer(modifier = Modifier.height(spacerHeight))
+            content(ratio, bioMinHeight)
         }
     }
 }

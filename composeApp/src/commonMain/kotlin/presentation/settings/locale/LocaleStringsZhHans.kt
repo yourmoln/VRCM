@@ -205,4 +205,13 @@ internal val LocaleStringsZhHans = LocaleStrings(
     // User Note
     userNoteEditTitle = "编辑备注",
     userNoteSaved = "备注已保存",
+
+    // User Created Worlds & Avatars
+    userCreatedWorlds = "创建的世界",
+    userCreatedAvatars = "创建的模型",
+    userCreatedWorldsCount = "世界: %d",
+    userCreatedAvatarsCount = "模型: %d",
+    userCreatedLoading = "加载中...",
+    userCreatedEmpty = "暂无内容",
+    userFavoritedWorlds = "收藏的世界",
 )

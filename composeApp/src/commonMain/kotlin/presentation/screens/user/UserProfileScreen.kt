@@ -45,6 +45,9 @@ import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.LanguageIcons
 import io.github.vrcmteam.vrcm.presentation.supports.WebIcons
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
+import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
+import io.github.vrcmteam.vrcm.network.api.worlds.data.FavoritedWorld
+import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
 import kotlinx.coroutines.launch
 import org.koin.core.parameter.parametersOf
 
@@ -85,11 +88,18 @@ data class UserProfileScreen(
                 iconUrl = currentUser.iconUrl,
                 onReturn = { currentNavigator.pop() },
                 onMenu = { bottomSheetIsVisible = true },
-            ) { ratio ->
+            ) { ratio, contentMinHeight ->
                 ProfileContent(
                     currentUser = currentUser,
                     friendLocation = userProfileScreenModel.friendLocation,
                     userGroups = userGroups,
+                    createdWorlds = userProfileScreenModel.createdWorlds,
+                    createdAvatars = userProfileScreenModel.createdAvatars,
+                    favoritedWorlds = userProfileScreenModel.favoritedWorlds,
+                    contentMinHeight = contentMinHeight,
+                    onLoadWorlds = { userProfileScreenModel.loadCreatedWorlds(userProfileVO.id) },
+                    onLoadAvatars = { userProfileScreenModel.loadCreatedAvatars() },
+                    onLoadFavoritedWorlds = { userProfileScreenModel.loadFavoritedWorlds(userProfileVO.id) },
                     ratio = ratio,
                 )
             }
@@ -355,23 +365,32 @@ private fun JsonAlertDialog(
 }
 
 @Composable
-private fun ProfileContent(
+private fun ColumnScope.ProfileContent(
     currentUser: UserProfileVo?,
     friendLocation: FriendLocation?,
     userGroups: List<LimitedUserGroup>,
+    createdWorlds: List<WorldData>,
+    createdAvatars: List<AvatarData>,
+    favoritedWorlds: List<Pair<String, List<FavoritedWorld>>>,
+    contentMinHeight: Dp,
+    onLoadWorlds: () -> Unit,
+    onLoadAvatars: () -> Unit,
+    onLoadFavoritedWorlds: () -> Unit,
     ratio: Float,
 ) {
     if (currentUser == null) return
     val sharedSuffixKey = LocalSharedSuffixKey.current
-    val inverseRatio = 1 - ratio
-    val scrollState = rememberScrollState()
     val navigator = currentNavigator
-    // 当上方图片完整显示时子内容自动滚动到顶部
-    if (inverseRatio == 0f) {
-        LaunchedEffect(Unit) {
-            scrollState.animateScrollTo(0)
+
+    // 加载创建的世界和模型
+    LaunchedEffect(currentUser.id, currentUser.isSelf) {
+        onLoadWorlds()
+        onLoadFavoritedWorlds()
+        if (currentUser.isSelf) {
+            onLoadAvatars()
         }
     }
+
     // TrustRank + UserName + VRC+
     UserInfoRow(user = currentUser, canCopy = true)
     UserPronouns(pronouns = currentUser.pronouns)
@@ -436,12 +455,40 @@ private fun ProfileContent(
         }
     )
 
-    Box(
-        modifier = Modifier
-            .padding(top = 12.dp)
-    ) {
-        BottomCardTab(scrollState, currentUser)
+    // 个人简介
+    BottomCardTab(
+        bioMinHeight = contentMinHeight,
+        userProfileVO = currentUser
+    )
+
+    // 创建的世界（在个人简介下方）
+    UserCreatedWorldsSection(
+        worlds = createdWorlds,
+        onWorldClick = { world ->
+            navigator push WorldProfileScreen(
+                worldProfileVO = WorldProfileVo(world),
+                sharedSuffixKey = sharedSuffixKey
+            )
+        }
+    )
+
+    // 创建的模型（仅自己可见，在个人简介下方）
+    if (currentUser.isSelf) {
+        UserCreatedAvatarsSection(
+            avatars = createdAvatars,
+        )
     }
+
+    // 收藏的世界（在创建的模型下方）
+    UserFavoritedWorldsSection(
+        groupedWorlds = favoritedWorlds,
+        onWorldClick = { world ->
+            navigator push WorldProfileScreen(
+                worldProfileVO = WorldProfileVo(worldId = world.id, worldName = world.name, worldImageUrl = world.imageUrl, thumbnailImageUrl = world.thumbnailImageUrl, authorName = world.authorName),
+                sharedSuffixKey = sharedSuffixKey
+            )
+        }
+    )
 }
 
 @OptIn(ExperimentalSharedTransitionApi::class)
@@ -519,6 +566,238 @@ private fun UserGroupsSection(
     }
 }
 
+/**
+ * 用户创建的世界列表组件（懒加载横向滚动）
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun UserCreatedWorldsSection(
+    worlds: List<WorldData>,
+    onWorldClick: (WorldData) -> Unit,
+) {
+    if (worlds.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = strings.userCreatedWorlds,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = strings.userCreatedWorldsCount.format(worlds.size),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(worlds, key = { it.id }) { world ->
+                Surface(
+                    modifier = Modifier
+                        .width(180.dp)
+                        .height(88.dp)
+                        .clip(MaterialTheme.shapes.large)
+                        .clickable { onWorldClick(world) },
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AImage(
+                            modifier = Modifier
+                                .sharedBoundsBy("${world.id}WorldImage")
+                                .size(48.dp)
+                                .clip(MaterialTheme.shapes.medium),
+                            imageData = world.thumbnailImageUrl ?: world.imageUrl,
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = world.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = "${world.publicOccupants ?: 0} 👤",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 用户创建的模型列表组件（懒加载横向滚动）
+ */
+@Composable
+private fun UserCreatedAvatarsSection(
+    avatars: List<AvatarData>,
+) {
+    if (avatars.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = strings.userCreatedAvatars,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(
+                text = strings.userCreatedAvatarsCount.format(avatars.size),
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(avatars, key = { it.id }) { avatar ->
+                Surface(
+                    modifier = Modifier
+                        .width(180.dp)
+                        .height(88.dp)
+                        .clip(MaterialTheme.shapes.large),
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Row(
+                        modifier = Modifier.padding(10.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        AImage(
+                            modifier = Modifier
+                                .size(48.dp)
+                                .clip(MaterialTheme.shapes.medium),
+                            imageData = avatar.thumbnailImageUrl ?: avatar.imageUrl,
+                        )
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Text(
+                                text = avatar.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Text(
+                                text = avatar.authorName,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 用户收藏的世界列表组件（按分组显示，懒加载横向滚动）
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun UserFavoritedWorldsSection(
+    groupedWorlds: List<Pair<String, List<FavoritedWorld>>>,
+    onWorldClick: (FavoritedWorld) -> Unit,
+) {
+    if (groupedWorlds.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(
+            text = strings.userFavoritedWorlds,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        for ((groupName, worlds) in groupedWorlds) {
+            if (worlds.isEmpty()) continue
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                Text(
+                    text = groupName,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(worlds, key = { it.id }) { world ->
+                        Surface(
+                            modifier = Modifier
+                                .width(180.dp)
+                                .height(88.dp)
+                                .clip(MaterialTheme.shapes.large)
+                                .clickable { onWorldClick(world) },
+                            color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                            contentColor = MaterialTheme.colorScheme.primary
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                AImage(
+                                    modifier = Modifier
+                                        .size(48.dp)
+                                        .clip(MaterialTheme.shapes.medium),
+                                    imageData = world.thumbnailImageUrl ?: world.imageUrl,
+                                )
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = world.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${world.occupants ?: 0} 👤",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun UserPronouns(pronouns: String) {
     if (pronouns.isNotEmpty()) {
@@ -535,7 +814,7 @@ fun UserPronouns(pronouns: String) {
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 private fun BottomCardTab(
-    scrollState: ScrollState,
+    bioMinHeight: Dp = 0.dp,
     userProfileVO: UserProfileVo,
 ) {
     Column(
@@ -543,65 +822,26 @@ private fun BottomCardTab(
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         var state by remember { mutableStateOf(0) }
-        val titles = listOf("Bio", "Worlds", "Groups")
-        // TODO
-//        PrimaryTabRow(
-//            modifier = Modifier
-//                .padding(horizontal = 12.dp)
-//                .clip(MaterialTheme.shapes.extraLarge),
-//            selectedTabIndex = state
-//        ) {
-//            titles.forEachIndexed { index, title ->
-//                Tab(
-//                    selected = state == index,
-//                    enabled = index == 0,
-//                    onClick = { state = index },
-//                    text = { Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-//                )
-//            }
-//        }
         AnimatedContent(targetState = state) {
             when (it) {
                 0 -> {
                     Surface(
+                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = bioMinHeight),
                         color = MaterialTheme.colorScheme.surfaceContainerLowest,
                         contentColor = MaterialTheme.colorScheme.primary,
                         shape = MaterialTheme.shapes.extraLarge
                     ) {
-                        // 加个内边距
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp)
-                                .verticalScroll(scrollState),
-                        ) {
-                            SelectionContainer {
-                                Text(
-                                    text = userProfileVO.bio
-                                )
-                            }
+                        SelectionContainer {
+                            Text(
+                                modifier = Modifier.padding(12.dp),
+                                text = userProfileVO.bio
+                            )
                         }
                     }
                 }
 
                 else -> {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        // 加个内边距
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp)
-                                .verticalScroll(scrollState),
-                        ) {
-                            Text(
-                                text = titles[it]
-                            )
-                        }
-                    }
+                    // TODO: 未来实现 Worlds/Groups 标签页
                 }
             }
         }

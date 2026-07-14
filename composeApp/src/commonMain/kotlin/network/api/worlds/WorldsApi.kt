@@ -108,6 +108,36 @@ class WorldsApi(private val client: HttpClient)  {
      * @param userId 查看目标用户的信息（仅管理员）
      * @return List<FavoritedWorld> 收藏的世界数据列表，包含收藏信息
      */
+    /**
+     * 流式获取用户创建的世界列表（自动分页）
+     *
+     * @param userId 用户ID
+     * @param sort 排序方式，默认为更新时间
+     * @param order 排序顺序，默认为降序
+     * @param releaseStatus 发布状态过滤
+     * @param n 每页数量
+     * @return Flow<List<WorldData>> 世界数据列表流
+     */
+    fun userWorldsFlow(
+        userId: String,
+        sort: String = "updated",
+        order: String = "descending",
+        releaseStatus: String = "public",
+        n: Int = 50,
+    ): Flow<List<WorldData>> = flow {
+        fetchDataList(offset = 0, n = n) { currentOffset, pageSize ->
+            searchWorld(
+                search = "",
+                sort = sort,
+                userId = userId,
+                n = pageSize,
+                order = order,
+                offset = currentOffset,
+                releaseStatus = releaseStatus,
+            )
+        }
+    }
+
     suspend fun getFavoritedWorlds(
         featured: Boolean? = null,
         sort: String? = null,
@@ -121,7 +151,8 @@ class WorldsApi(private val client: HttpClient)  {
         maxUnityVersion: String? = null,
         minUnityVersion: String? = null,
         platform: String? = null,
-        userId: String? = null
+        userId: String? = null,
+        ownerId: String? = null
     ): List<FavoritedWorld> =
         client.get("$WORLDS_API_PREFIX/favorites") {
             parameter("n", n)
@@ -137,5 +168,6 @@ class WorldsApi(private val client: HttpClient)  {
             minUnityVersion?.let { parameter("minUnityVersion", it) }
             platform?.let { parameter("platform", it) }
             userId?.let { parameter("userId", it) }
+            ownerId?.let { parameter("ownerId", it) }
         }.checkSuccess()
 }

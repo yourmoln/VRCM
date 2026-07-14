@@ -11,6 +11,10 @@ import io.github.vrcmteam.vrcm.network.api.attributes.BlueprintType
 import io.github.vrcmteam.vrcm.network.api.attributes.LocationType
 import io.github.vrcmteam.vrcm.network.api.attributes.NotificationType
 import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
+import io.github.vrcmteam.vrcm.network.api.avatars.AvatarsApi
+import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
+import io.github.vrcmteam.vrcm.network.api.favorite.FavoriteApi
+import io.github.vrcmteam.vrcm.network.api.attributes.FavoriteType
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
 import io.github.vrcmteam.vrcm.network.api.instances.InstancesApi
@@ -19,6 +23,9 @@ import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import io.github.vrcmteam.vrcm.network.api.users.data.UpdateUserInfoData
+import io.github.vrcmteam.vrcm.network.api.worlds.WorldsApi
+import io.github.vrcmteam.vrcm.network.api.worlds.data.FavoritedWorld
+import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.HomeInstanceVo
@@ -42,6 +49,9 @@ class UserProfileScreenModel(
     private val notificationApi: NotificationApi,
     private val logger: Logger,
     private val instancesApi: InstancesApi,
+    private val worldsApi: WorldsApi,
+    private val avatarsApi: AvatarsApi,
+    private val favoriteApi: FavoriteApi,
 ) : ScreenModel {
 
     private val _userState = mutableStateOf(userProfileVO)
@@ -55,6 +65,23 @@ class UserProfileScreenModel(
 
     private val _userGroups = mutableStateOf<List<LimitedUserGroup>>(emptyList())
     val userGroups by _userGroups
+
+    private val _createdWorlds = mutableStateOf<List<WorldData>>(emptyList())
+    val createdWorlds by _createdWorlds
+
+    private val _createdAvatars = mutableStateOf<List<AvatarData>>(emptyList())
+    val createdAvatars by _createdAvatars
+
+    private val _isLoadingWorlds = mutableStateOf(false)
+    val isLoadingWorlds by _isLoadingWorlds
+
+    private val _isLoadingAvatars = mutableStateOf(false)
+    val isLoadingAvatars by _isLoadingAvatars
+
+    private val _isLoadingFavoritedWorlds = mutableStateOf(false)
+
+    private val _favoritedWorlds = mutableStateOf<List<Pair<String, List<FavoritedWorld>>>>(emptyList())
+    val favoritedWorlds by _favoritedWorlds
 
     fun refreshUser(userId: String) =
         screenModelScope.launch(Dispatchers.IO) {
@@ -188,6 +215,102 @@ class UserProfileScreenModel(
             _userGroups.value = it
         }.onFailure {
             handleError(it)
+        }
+    }
+
+    /**
+     * 加载用户创建的世界列表
+     */
+    fun loadCreatedWorlds(userId: String) {
+        if (_isLoadingWorlds.value) return
+        _isLoadingWorlds.value = true
+        _createdWorlds.value = emptyList()
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                val allWorlds = mutableListOf<WorldData>()
+                val isSelf = userState.isSelf
+                worldsApi.userWorldsFlow(
+                    userId = userId,
+                    sort = "updated",
+                    order = "descending",
+                    releaseStatus = if (isSelf) "all" else "public",
+                    n = 50,
+                ).collect { worldList ->
+                    allWorlds.addAll(worldList)
+                    _createdWorlds.value = allWorlds.toList()
+                }
+            } catch (e: Exception) {
+                handleError(e)
+            }
+            _isLoadingWorlds.value = false
+        }
+    }
+
+    /**
+     * 加载用户创建的模型列表
+     * 注意：VRChat API 仅支持 user=me 查询自己的模型，不支持查询他人模型
+     */
+    fun loadCreatedAvatars() {
+        if (_isLoadingAvatars.value) return
+        if (!userState.isSelf) return
+        _isLoadingAvatars.value = true
+        _createdAvatars.value = emptyList()
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                val allAvatars = mutableListOf<AvatarData>()
+                avatarsApi.avatarsFlow(
+                    user = "me",
+                    sort = "updated",
+                    order = "descending",
+                    releaseStatus = "all",
+                    n = 50,
+                ).collect { avatarList ->
+                    allAvatars.addAll(avatarList)
+                    _createdAvatars.value = allAvatars.toList()
+                }
+            } catch (e: Exception) {
+                handleError(e)
+            }
+            _isLoadingAvatars.value = false
+        }
+    }
+
+    /**
+     * 加载用户收藏的世界列表（按分组并行获取）
+     */
+    fun loadFavoritedWorlds(userId: String) {
+        if (_isLoadingFavoritedWorlds.value) return
+        _isLoadingFavoritedWorlds.value = true
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                val groups = authService.reTryAuthCatching {
+                    favoriteApi.getFavoriteGroupsByType(
+                        favoriteType = FavoriteType.World,
+                        ownerId = userId,
+                        n = 100
+                    )
+                }.getOrNull() ?: run {
+                    _isLoadingFavoritedWorlds.value = false
+                    return@launch
+                }
+
+                val deferreds = groups.map { group ->
+                    async {
+                        runCatching {
+                            authService.reTryAuthCatching {
+                                worldsApi.getFavoritedWorlds(
+                                    ownerId = userId,
+                                    userId = userId,
+                                    tag = group.name,
+                                    n = 100
+                                )
+                            }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { group.displayName to it }
+                        }.getOrNull()
+                    }
+                }
+                _favoritedWorlds.value = deferreds.mapNotNull { it.await() }.toMutableList()
+            } catch (_: Exception) {}
+            _isLoadingFavoritedWorlds.value = false
         }
     }
 

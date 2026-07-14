@@ -205,4 +205,13 @@ internal val LocaleStringsJa = LocaleStrings(
     // User Note
     userNoteEditTitle = "メモを編集",
     userNoteSaved = "メモを保存しました",
+
+    // User Created Worlds & Avatars
+    userCreatedWorlds = "作成したワールド",
+    userCreatedAvatars = "作成したアバター",
+    userCreatedWorldsCount = "ワールド: %d",
+    userCreatedAvatarsCount = "アバター: %d",
+    userCreatedLoading = "読み込み中...",
+    userCreatedEmpty = "アイテムなし",
+    userFavoritedWorlds = "お気に入りワールド",
 )

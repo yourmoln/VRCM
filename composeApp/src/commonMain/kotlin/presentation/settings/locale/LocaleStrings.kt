@@ -210,6 +210,15 @@ data class LocaleStrings(
     // User Note
     val userNoteEditTitle: String = "Edit Note",
     val userNoteSaved: String = "Note saved",
+
+    // User Created Worlds & Avatars
+    val userCreatedWorlds: String = "Created Worlds",
+    val userCreatedAvatars: String = "Created Avatars",
+    val userCreatedWorldsCount: String = "Worlds: %d",
+    val userCreatedAvatarsCount: String = "Avatars: %d",
+    val userCreatedLoading: String = "Loading...",
+    val userCreatedEmpty: String = "No items",
+    val userFavoritedWorlds: String = "Favorited Worlds",
 )
 
 val strings: LocaleStrings
