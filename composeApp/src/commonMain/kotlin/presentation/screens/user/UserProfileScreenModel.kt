@@ -219,6 +219,7 @@ class UserProfileScreenModel(
 
     /**
      * 加载用户创建的世界列表
+     * 先用搜索API快速展示卡片，再懒加载description
      */
     fun loadCreatedWorlds(userId: String) {
         if (_isLoadingWorlds.value) return
@@ -227,8 +228,7 @@ class UserProfileScreenModel(
         screenModelScope.launch(Dispatchers.IO) {
             try {
                 val isSelf = userState.isSelf
-                // 第一步：通过搜索API获取世界ID列表
-                val worldIds = mutableListOf<String>()
+                val allWorlds = mutableListOf<WorldData>()
                 worldsApi.userWorldsFlow(
                     user = if (isSelf) "me" else null,
                     userId = if (isSelf) null else userId,
@@ -237,17 +237,25 @@ class UserProfileScreenModel(
                     releaseStatus = if (isSelf) "all" else "public",
                     n = 100,
                 ).collect { worldList ->
-                    worldIds.addAll(worldList.map { it.id })
+                    allWorlds.addAll(worldList)
                 }
-                // 第二步：逐个获取完整世界详情（含 description）
+                // 展示列表
+                _createdWorlds.value = allWorlds
+                _isLoadingWorlds.value = false
+
+                // 逐批获取完整详情以填充description
+                val worldIds = allWorlds.map { it.id }
                 if (worldIds.isNotEmpty()) {
                     val fullWorlds = worldsApi.fetchWorldsByIds(worldIds)
-                    _createdWorlds.value = fullWorlds
+                    val fullMap = fullWorlds.associateBy { it.id }
+                    _createdWorlds.value = allWorlds.map { world ->
+                        fullMap[world.id] ?: world
+                    }
                 }
             } catch (e: Exception) {
                 handleError(e)
+                _isLoadingWorlds.value = false
             }
-            _isLoadingWorlds.value = false
         }
     }
 

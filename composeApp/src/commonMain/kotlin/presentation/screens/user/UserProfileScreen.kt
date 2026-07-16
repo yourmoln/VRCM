@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
@@ -609,14 +610,17 @@ private fun SectionHeader(
 }
 
 /**
- * 卡片入场动画修饰符：淡入 + 向上滑入，根据 index 错开延迟
+ * 卡片入场动画修饰符：淡入 + 向上滑入，根据 index 错开延迟（上限 5 项）
  */
 @Composable
 private fun rememberCardEntranceModifier(index: Int): Modifier {
     val alpha = remember { Animatable(0f) }
-    val offsetY = remember { Animatable(24f) }
+    val offsetY = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val targetOffsetPx = with(density) { 24.dp.toPx() }
     LaunchedEffect(Unit) {
-        kotlinx.coroutines.delay(index * 60L)
+        offsetY.snapTo(targetOffsetPx)
+        kotlinx.coroutines.delay(minOf(index, 5) * 60L)
         kotlinx.coroutines.coroutineScope {
             launch {
                 alpha.animateTo(
@@ -834,17 +838,34 @@ private fun DetailTopBar(
 }
 
 /**
- * 卡片列表详情页（泛型）
+ * 卡片列表项数据（可序列化，用于详情页）
  */
-private class CardListDetailScreen<T>(
+private data class CardItemVo(
+    val id: String,
+    val imageUrl: String?,
+    val thumbnailUrl: String?,
+    val title: String,
+    val subtitle: String,
+    val authorName: String = "",
+    val avatarData: AvatarData? = null,
+) : cafe.adriel.voyager.core.lifecycle.JavaSerializable
+
+/**
+ * 卡片导航类型
+ */
+private enum class CardScreenType : cafe.adriel.voyager.core.lifecycle.JavaSerializable {
+    WORLD, AVATAR, FAVORITED_WORLD
+}
+
+/**
+ * 卡片列表详情页（非泛型，仅携带可序列化数据）
+ */
+private class CardListDetailScreen(
     private val title: String,
-    private val items: List<T>,
-    private val itemKey: (T) -> Any,
-    private val imageUrl: (T) -> String?,
-    private val itemTitle: (T) -> String,
-    private val itemSubtitle: (T) -> String,
+    private val items: List<CardItemVo>,
     private val sectionKey: String,
-    private val onClickItem: (T) -> Unit,
+    private val screenType: CardScreenType,
+    private val sharedSuffixKey: String = "",
 ) : Screen {
     @Composable
     override fun Content() {
@@ -862,12 +883,34 @@ private class CardListDetailScreen<T>(
                 )
                 CardListContent(
                     items = items,
-                    key = itemKey,
-                    imageUrl = imageUrl,
-                    itemTitle = itemTitle,
-                    itemSubtitle = itemSubtitle,
+                    key = { it.id },
+                    imageUrl = { it.imageUrl ?: it.thumbnailUrl },
+                    itemTitle = { it.title },
+                    itemSubtitle = { it.subtitle },
                     sectionKey = sectionKey,
-                    onClickItem = onClickItem
+                    onClickItem = { item ->
+                        when (screenType) {
+                            CardScreenType.WORLD, CardScreenType.FAVORITED_WORLD -> {
+                                navigator push WorldProfileScreen(
+                                    worldProfileVO = WorldProfileVo(
+                                        worldId = item.id,
+                                        worldName = item.title,
+                                        worldImageUrl = item.imageUrl,
+                                        thumbnailImageUrl = item.thumbnailUrl,
+                                        authorName = item.authorName
+                                    ),
+                                    sharedSuffixKey = sharedSuffixKey
+                                )
+                            }
+                            CardScreenType.AVATAR -> {
+                                item.avatarData?.let { avatar ->
+                                    navigator push AvatarProfileScreen(
+                                        avatarProfileVo = AvatarProfileVo(avatar)
+                                    )
+                                }
+                            }
+                        }
+                    }
                 )
             }
         }
@@ -979,18 +1022,17 @@ private fun UserCreatedWorldsSection(
             onNavigateToDetail = { list ->
                 navigator push CardListDetailScreen(
                     title = createdWorldsTitle,
-                    items = list,
-                    itemKey = { it.id },
-                    imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
-                    itemTitle = { it.name },
-                    itemSubtitle = { it.description ?: "" },
+                    items = list.map { CardItemVo(
+                        id = it.id,
+                        imageUrl = it.thumbnailImageUrl ?: it.imageUrl,
+                        thumbnailUrl = it.thumbnailImageUrl,
+                        title = it.name,
+                        subtitle = it.description ?: "",
+                        authorName = it.authorName
+                    ) },
                     sectionKey = createdWorldsTitle,
-                    onClickItem = { w ->
-                        navigator push WorldProfileScreen(
-                            worldProfileVO = WorldProfileVo(w),
-                            sharedSuffixKey = sharedSuffixKey
-                        )
-                    }
+                    screenType = CardScreenType.WORLD,
+                    sharedSuffixKey = sharedSuffixKey
                 )
             }
         )
@@ -1019,20 +1061,25 @@ private fun UserCreatedAvatarsSection(
             title = { it.name },
             subtitle = { it.description ?: it.authorName },
             detailTitle = createdAvatarsTitle,
+            onClickItem = { avatar ->
+                navigator push AvatarProfileScreen(
+                    avatarProfileVo = AvatarProfileVo(avatar)
+                )
+            },
             onNavigateToDetail = { list ->
                 navigator push CardListDetailScreen(
                     title = createdAvatarsTitle,
-                    items = list,
-                    itemKey = { it.id },
-                    imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
-                    itemTitle = { it.name },
-                    itemSubtitle = { it.description?.takeIf { d -> d.isNotBlank() } ?: it.authorName },
+                    items = list.map { CardItemVo(
+                        id = it.id,
+                        imageUrl = it.thumbnailImageUrl ?: it.imageUrl,
+                        thumbnailUrl = it.thumbnailImageUrl,
+                        title = it.name,
+                        subtitle = it.description?.takeIf { d -> d.isNotBlank() } ?: it.authorName,
+                        authorName = it.authorName,
+                        avatarData = it
+                    ) },
                     sectionKey = createdAvatarsTitle,
-                    onClickItem = { avatar ->
-                        navigator push AvatarProfileScreen(
-                            avatarProfileVo = AvatarProfileVo(avatar)
-                        )
-                    }
+                    screenType = CardScreenType.AVATAR
                 )
             }
         )
@@ -1073,22 +1120,17 @@ private fun UserFavoritedWorldsSection(
                     onNavigateToDetail = { list ->
                         navigator push CardListDetailScreen(
                             title = groupName,
-                            items = list,
-                            itemKey = { it.id },
-                            imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
-                            itemTitle = { it.name },
-                            itemSubtitle = { it.description?.takeIf { d -> d.isNotBlank() } ?: "${it.occupants ?: 0} 👤" },
+                            items = list.map { CardItemVo(
+                                id = it.id,
+                                imageUrl = it.thumbnailImageUrl ?: it.imageUrl,
+                                thumbnailUrl = it.thumbnailImageUrl,
+                                title = it.name,
+                                subtitle = it.description?.takeIf { d -> d.isNotBlank() } ?: "${it.occupants ?: 0} 👤",
+                                authorName = it.authorName ?: ""
+                            ) },
                             sectionKey = groupName,
-                            onClickItem = { w ->
-                                navigator push WorldProfileScreen(
-                                    worldProfileVO = WorldProfileVo(
-                                        worldId = w.id, worldName = w.name,
-                                        worldImageUrl = w.imageUrl, thumbnailImageUrl = w.thumbnailImageUrl,
-                                        authorName = w.authorName
-                                    ),
-                                    sharedSuffixKey = sharedSuffixKey
-                                )
-                            }
+                            screenType = CardScreenType.FAVORITED_WORLD,
+                            sharedSuffixKey = sharedSuffixKey
                         )
                     }
                 )

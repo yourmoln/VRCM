@@ -16,7 +16,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
-import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.navigator.LocalNavigator
@@ -122,7 +121,7 @@ private fun AvatarProfileContent(
 
     // 平台信息（隐藏Unknown平台和Unknown评级）
     val knownPlatforms = avatarProfileVo.platformInfos.filter {
-        it.platform != "Unknown" && !it.performanceRating.isNullOrEmpty() && it.performanceRating.lowercase() != "unknown"
+        !it.performanceRating.isNullOrEmpty()
     }
     if (knownPlatforms.isNotEmpty()) {
         AvatarPlatformSection(knownPlatforms)
@@ -132,14 +131,6 @@ private fun AvatarProfileContent(
 @Composable
 private fun AvatarInfoCards(avatarProfileVo: AvatarProfileVo) {
     val infoCards = mutableListOf<Triple<ImageVector, String, String>>()
-
-    // 模型评级 - 取所有平台中最低的评级
-    val worstRating = avatarProfileVo.platformInfos
-        .mapNotNull { it.performanceRating }
-        .minByOrNull { ratingOrder(it) }
-    if (worstRating != null) {
-        infoCards.add(Triple(AppIcons.Hot, worstRating.replaceFirstChar { it.uppercase() }, strings.avatarProfileRating))
-    }
 
     // 版本
     avatarProfileVo.version?.let {
@@ -163,31 +154,33 @@ private fun AvatarInfoCards(avatarProfileVo: AvatarProfileVo) {
         infoCards.add(Triple(AppIcons.DateRange, it, strings.avatarProfileUpdated))
     }
 
-    val itemSize = DpSize(width = 80.dp, height = 68.dp)
+    val cardHeight = 68.dp
     val cardsPerRow = 4
     val rows = (infoCards.size + cardsPerRow - 1) / cardsPerRow
+    val spacing = 8.dp
 
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        for (rowIndex in 0 until rows) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                for (colIndex in 0 until cardsPerRow) {
-                    val cardIndex = rowIndex * cardsPerRow + colIndex
-                    if (cardIndex < infoCards.size) {
-                        val (icon, label, description) = infoCards[cardIndex]
-                        AvatarInfoItemBlock(
-                            size = itemSize,
-                            icon = icon,
-                            label = label,
-                            description = description
-                        )
-                    } else {
-                        Spacer(modifier = Modifier.size(itemSize))
+    BoxWithConstraints(modifier = Modifier.fillMaxWidth()) {
+        val cardWidth = (maxWidth - spacing * (cardsPerRow - 1)) / cardsPerRow
+        Column(
+            verticalArrangement = Arrangement.spacedBy(spacing)
+        ) {
+            for (rowIndex in 0 until rows) {
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(spacing)
+                ) {
+                    for (colIndex in 0 until cardsPerRow) {
+                        val cardIndex = rowIndex * cardsPerRow + colIndex
+                        if (cardIndex < infoCards.size) {
+                            val (icon, label, description) = infoCards[cardIndex]
+                            AvatarInfoItemBlock(
+                                modifier = Modifier.width(cardWidth).height(cardHeight),
+                                icon = icon,
+                                label = label,
+                                description = description
+                            )
+                        } else {
+                            Spacer(modifier = Modifier.width(cardWidth).height(cardHeight))
+                        }
                     }
                 }
             }
@@ -198,7 +191,7 @@ private fun AvatarInfoCards(avatarProfileVo: AvatarProfileVo) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun AvatarInfoItemBlock(
-    size: DpSize,
+    modifier: Modifier = Modifier,
     icon: ImageVector,
     label: String,
     description: String,
@@ -213,8 +206,7 @@ private fun AvatarInfoItemBlock(
             else -> MaterialTheme.colorScheme.tertiary
         }
         Column(
-            modifier = Modifier
-                .size(size)
+            modifier = modifier
                 .clip(RoundedCornerShape(12.dp))
                 .background(bgColor),
             horizontalAlignment = Alignment.CenterHorizontally,
