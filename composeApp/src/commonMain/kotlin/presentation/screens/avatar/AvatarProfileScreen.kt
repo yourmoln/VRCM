@@ -119,7 +119,7 @@ private fun AvatarProfileContent(
 
     Spacer(modifier = Modifier.height(12.dp))
 
-    // 平台信息（隐藏Unknown平台和Unknown评级）
+    // 平台信息（过滤没有适配的平台）
     val knownPlatforms = avatarProfileVo.platformInfos.filter {
         !it.performanceRating.isNullOrEmpty()
     }
@@ -201,10 +201,7 @@ private fun AvatarInfoItemBlock(
             Text(text = description, style = MaterialTheme.typography.labelSmall)
         }
     ) {
-        val bgColor = when {
-            description == strings.avatarProfileRating -> ratingColor(label)
-            else -> MaterialTheme.colorScheme.tertiary
-        }
+        val bgColor = MaterialTheme.colorScheme.tertiary
         Column(
             modifier = modifier
                 .clip(RoundedCornerShape(12.dp))
@@ -296,14 +293,4 @@ private fun ratingColor(rating: String?): androidx.compose.ui.graphics.Color {
     }
 }
 
-/**
- * 评级排序权重
- */
-private fun ratingOrder(rating: String): Int = when (rating.lowercase()) {
-    "excellent" -> 0
-    "good" -> 1
-    "medium" -> 2
-    "poor" -> 3
-    "verypoor" -> 4
-    else -> 5
-}
+

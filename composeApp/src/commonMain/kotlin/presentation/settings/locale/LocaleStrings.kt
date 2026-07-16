@@ -221,7 +221,6 @@ data class LocaleStrings(
     val userFavoritedWorlds: String = "Favorited Worlds",
 
     // Avatar Profile
-    val avatarProfileRating: String = "Rating",
     val avatarProfileVersion: String = "Version",
     val avatarProfileStatus: String = "Status",
     val avatarProfileCreated: String = "Created",

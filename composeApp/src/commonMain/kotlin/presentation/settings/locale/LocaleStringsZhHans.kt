@@ -216,7 +216,6 @@ internal val LocaleStringsZhHans = LocaleStrings(
     userFavoritedWorlds = "收藏的世界",
 
     // Avatar Profile
-    avatarProfileRating = "评级",
     avatarProfileVersion = "版本",
     avatarProfileStatus = "状态",
     avatarProfileCreated = "创建时间",

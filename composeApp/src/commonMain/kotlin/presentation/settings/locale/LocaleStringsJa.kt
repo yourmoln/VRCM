@@ -216,7 +216,6 @@ internal val LocaleStringsJa = LocaleStrings(
     userFavoritedWorlds = "お気に入りのワールド",
 
     // Avatar Profile
-    avatarProfileRating = "評価",
     avatarProfileVersion = "バージョン",
     avatarProfileStatus = "ステータス",
     avatarProfileCreated = "作成日",
