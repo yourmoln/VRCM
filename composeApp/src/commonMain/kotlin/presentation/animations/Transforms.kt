@@ -85,7 +85,11 @@ fun slideScreenTransition(
         ) + fadeOut(animationFloatSpec, 0.8f)
 
         SlideOrientation.Vertical ->
-            slideInVertically(initialOffsetY= initialOffset) togetherWith slideOutVertically(targetOffsetY = targetOffset) + fadeOut(animationFloatSpec)
+            slideInVertically(initialOffsetY = initialOffset) togetherWith scaleOut(
+                animationFloatSpec,
+                0.85f,
+                TransformOrigin(0.5f, 0.3f)
+            ) + fadeOut(animationFloatSpec)
 
     }
 }

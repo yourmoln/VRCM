@@ -8,7 +8,12 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.*
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -16,12 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.koin.koinScreenModel
-import cafe.adriel.voyager.navigator.LocalNavigator
-import cafe.adriel.voyager.navigator.currentOrThrow
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
 import io.github.vrcmteam.vrcm.core.extensions.selectImageFromGallery
@@ -29,6 +31,7 @@ import io.github.vrcmteam.vrcm.getAppPlatform
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
+import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
@@ -54,36 +57,27 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
     override fun Content() {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
 
-        val navigator = LocalNavigator.currentOrThrow
-
+        val isPrint = tagType == FileTagType.Print
 
         Box(modifier = Modifier.fillMaxSize()) {
             RefreshBox(
-                isRefreshing = galleryScreenModel.isRefreshingByTag(tagType),
-                doRefresh = { galleryScreenModel.refreshFiles(tagType) }
+                isRefreshing = if (isPrint) galleryScreenModel.isRefreshingPrints else galleryScreenModel.isRefreshingByTag(tagType),
+                doRefresh = { if (isPrint) galleryScreenModel.refreshPrints() else galleryScreenModel.refreshFiles(tagType) }
             ) {
-                val files = galleryScreenModel.getFilesByTag(tagType)
-
-                if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
-                    EmptyContent(
-                        message = strings.galleryTabNoFiles.replace("%s", title),
-                    )
+                if (isPrint) {
+                    PrintContent(galleryScreenModel)
                 } else {
-                    GalleryGrid(files, tagType)
+                    FileContent(galleryScreenModel)
                 }
             }
 
-            // Print 标签页始终显示上传按钮（不受列表为空影响）
-            if (tagType == FileTagType.Print) {
+            if (isPrint) {
                 val coroutineScope = rememberCoroutineScope()
                 val platform = getAppPlatform()
                 FloatingActionButton(
                     onClick = {
                         coroutineScope.launch {
-                            val imagePath = platform.selectImageFromGallery()
-                            if (imagePath != null) {
-                                galleryScreenModel.uploadPrint(imagePath)
-                            }
+                            platform.selectImageFromGallery()?.let(galleryScreenModel::uploadPrint)
                         }
                     },
                     modifier = Modifier
@@ -91,10 +85,101 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                         .padding(16.dp),
                 ) {
                     Icon(
-                        painter = rememberVectorPainter(AppIcons.Add),
+                        imageVector = AppIcons.Add,
                         contentDescription = strings.galleryTabUploadImage,
                     )
                 }
+            }
+        }
+    }
+
+    @Composable
+    private fun PrintContent(galleryScreenModel: GalleryScreenModel) {
+        val prints = galleryScreenModel.prints
+        if (prints.isEmpty() && !galleryScreenModel.isRefreshingPrints) {
+            EmptyContent(message = strings.galleryTabNoFiles.replace("%s", title))
+        } else {
+            PrintGrid(prints)
+        }
+    }
+
+    @Composable
+    private fun FileContent(galleryScreenModel: GalleryScreenModel) {
+        val files = galleryScreenModel.getFilesByTag(tagType)
+        if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
+            EmptyContent(message = strings.galleryTabNoFiles.replace("%s", title))
+        } else {
+            GalleryGrid(files, tagType)
+        }
+    }
+
+    /**
+     * 拍立得网格展示
+     */
+    @Composable
+    private fun PrintGrid(prints: List<PrintData>) {
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            contentPadding = PaddingValues(8.dp),
+            verticalArrangement = Arrangement.spacedBy(3.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+            modifier = Modifier.fillMaxSize()
+        ) {
+            items(
+                items = prints,
+                key = { it.id },
+            ) { print ->
+                PrintItem(print)
+            }
+        }
+    }
+
+    @Composable
+    private fun PrintItem(print: PrintData) {
+        val imageUrl = print.files?.image ?: ""
+        val (dialogContent, setDialogContent) = LocationDialogContent.current
+
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .aspectRatio(16f / 9f),
+        ) {
+            AnimatedVisibility(dialogContent == null || (dialogContent as? ImagePreviewDialog)?.fileId != print.id) {
+                CoilImage(
+                    imageModel = { imageUrl },
+                    imageOptions = ImageOptions(
+                        contentScale = ContentScale.Crop,
+                        alignment = Alignment.Center
+                    ),
+                    imageLoader = { koinInject() },
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .clip(MaterialTheme.shapes.medium)
+                        .clickable {
+                            setDialogContent(ImagePreviewDialog(print.id, print.id, ".png", imageUrl))
+                        },
+                    loading = {
+                        Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(24.dp),
+                                strokeWidth = 2.dp
+                            )
+                        }
+                    },
+                    failure = {
+                        Column(
+                            modifier = Modifier.fillMaxSize(),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = strings.galleryTabLoadFailed,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.error
+                            )
+                        }
+                    }
+                )
             }
         }
     }

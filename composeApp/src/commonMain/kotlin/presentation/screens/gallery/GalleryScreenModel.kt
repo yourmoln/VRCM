@@ -1,6 +1,7 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery
 
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.AppPlatform
@@ -9,6 +10,7 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
+import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
 import io.github.vrcmteam.vrcm.network.api.prints.PrintsApi
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.extensions.onApiFailure
@@ -28,7 +30,8 @@ class GalleryScreenModel(
 
     // 使用Map存储不同标签类型的图片文件列表
     private val _filesByTag = mutableStateMapOf<FileTagType, List<FileData>>().apply {
-        FileTagType.entries.forEach { tagType ->
+        // 不包含 Print，Print 使用独立的 API
+        FileTagType.entries.filter { it != FileTagType.Print }.forEach { tagType ->
             this[tagType] = emptyList()
         }
     }
@@ -40,6 +43,10 @@ class GalleryScreenModel(
         }
     }
 
+    // 拍立得使用独立的 API (GET /prints/user/{userId})
+    private val _prints = mutableStateOf<List<PrintData>>(emptyList())
+    private val _isRefreshingPrints = mutableStateOf(false)
+
     fun init() {
         refreshAllFiles()
     }
@@ -49,7 +56,7 @@ class GalleryScreenModel(
         refreshFiles(FileTagType.Emoji)
         refreshFiles(FileTagType.Sticker)
         refreshFiles(FileTagType.Gallery)
-        refreshFiles(FileTagType.Print)
+        refreshPrints()
     }
 
     /**
@@ -74,6 +81,28 @@ class GalleryScreenModel(
                 }
         }
     }
+
+    /**
+     * 获取拍立得列表（使用独立 API: GET /prints/user/{userId}）
+     */
+    fun refreshPrints(n: Int = 100, offset: Int = 0) {
+        _isRefreshingPrints.value = true
+        screenModelScope.launch(Dispatchers.IO) {
+            val userId = authService.currentUser().id
+            authService.reTryAuthCatching { fileApi.getPrints(userId, n = n, offset = offset) }
+                .onGalleryFailure()
+                .onSuccess { prints ->
+                    _prints.value = prints.sortedByDescending { it.createdAt ?: it.timestamp }
+                }
+                .also {
+                    _isRefreshingPrints.value = false
+                }
+        }
+    }
+
+    val prints: List<PrintData> get() = _prints.value
+
+    val isRefreshingPrints: Boolean get() = _isRefreshingPrints.value
 
     /**
      * 根据标签类型获取对应的文件列表
@@ -136,10 +165,6 @@ class GalleryScreenModel(
         }
     }
 
-
-    /**
-     * 上传 Print 图片
-     */
     fun uploadPrint(imagePath: String) {
         screenModelScope.launch(Dispatchers.IO) {
             try {
@@ -148,15 +173,11 @@ class GalleryScreenModel(
                 val fileName = imagePath.substringAfterLast('\\').substringAfterLast('/')
 
                 authService.reTryAuthCatching {
-                    printsApi.uploadPrint(
-                        imageBytes = fileBytes,
-                        fileName = fileName,
-                    )
-                }.onGalleryFailure()
-                    .onSuccess {
-                        SharedFlowCentre.toastText.emit(ToastText.Success("Print uploaded"))
-                        refreshFiles(FileTagType.Print)
-                    }
+                    printsApi.uploadPrint(fileBytes, fileName)
+                }.onGalleryFailure().onSuccess {
+                    SharedFlowCentre.toastText.emit(ToastText.Success("Print uploaded"))
+                    refreshPrints()
+                }
             } catch (e: Exception) {
                 SharedFlowCentre.toastText.emit(ToastText.Error("Upload failed: ${e.message}"))
                 logger.error("Upload print exception: ${e.message}")
@@ -164,9 +185,6 @@ class GalleryScreenModel(
         }
     }
 
-    /**
-     * 编辑 Print (更新图片)
-     */
     fun editPrint(printId: String, imagePath: String, note: String? = null) {
         screenModelScope.launch(Dispatchers.IO) {
             try {
@@ -175,17 +193,11 @@ class GalleryScreenModel(
                 val fileName = imagePath.substringAfterLast('\\').substringAfterLast('/')
 
                 authService.reTryAuthCatching {
-                    printsApi.editPrint(
-                        printId = printId,
-                        imageBytes = fileBytes,
-                        fileName = fileName,
-                        note = note,
-                    )
-                }.onGalleryFailure()
-                    .onSuccess {
-                        SharedFlowCentre.toastText.emit(ToastText.Success("Print updated"))
-                        refreshFiles(FileTagType.Print)
-                    }
+                    printsApi.editPrint(printId, fileBytes, fileName, note)
+                }.onGalleryFailure().onSuccess {
+                    SharedFlowCentre.toastText.emit(ToastText.Success("Print updated"))
+                    refreshPrints()
+                }
             } catch (e: Exception) {
                 SharedFlowCentre.toastText.emit(ToastText.Error("Update failed: ${e.message}"))
                 logger.error("Edit print exception: ${e.message}")
@@ -193,20 +205,17 @@ class GalleryScreenModel(
         }
     }
 
-    /**
-     * 删除 Print
-     */
     fun deletePrint(printId: String) {
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
                 printsApi.deletePrint(printId)
-            }.onGalleryFailure()
-                .onSuccess {
-                    SharedFlowCentre.toastText.emit(ToastText.Success("Print deleted"))
-                    refreshFiles(FileTagType.Print)
-                }
+            }.onGalleryFailure().onSuccess {
+                SharedFlowCentre.toastText.emit(ToastText.Success("Print deleted"))
+                refreshPrints()
+            }
         }
     }
+
 
     /**
      * 根据文件名获取MIME类型

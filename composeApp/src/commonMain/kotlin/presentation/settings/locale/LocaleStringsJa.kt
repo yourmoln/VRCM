@@ -47,6 +47,22 @@ internal val LocaleStringsJa = LocaleStrings(
     profileViewGallery = "ギャラリーを表示",
     profileViewMutualFriends = "共通の友達を見る",
     profileViewFriendNetwork = "フレンドネットワークを見る",
+    profileEditProfile = "プロフィール編集",
+    editProfileTitle = "プロフィール編集",
+    editProfileStatus = "ソーシャルステータス",
+    editProfileStatusDescription = "ステータス説明",
+    editProfileStatusType = "ステータスタイプ",
+    editProfilePronouns = "代名詞",
+    editProfileBio = "自己紹介",
+    editProfileLanguage = "言語",
+    editProfileAddLanguage = "言語を追加",
+    editProfileLanguageHint = "最大3言語。タップで削除。",
+    editProfileSave = "保存",
+    editProfileStatusOnline = "オンライン",
+    editProfileStatusJoinMe = "だれでもおいで",
+    editProfileStatusAskMe = "きいてみてね",
+    editProfileStatusBusy = "取り込み中",
+    editProfileUpdateSuccess = "プロフィールを更新しました",
     mutualFriendsTitle = "共通の友達",
     mutualFriendsEmpty = "%sとの共通の友達はいません",
     mutualFriendsCount = "共通の友達：%total%",
@@ -86,7 +102,7 @@ internal val LocaleStringsJa = LocaleStrings(
     instanceCreateSuccessButInviteFailed = "インスタンスは作成されましたが、招待に失敗しました",
     instanceCreateFailed = "インスタンス作成に失敗しました",
 
-    // 世界検索関連
+    // World Search
     worldSearchAdvancedOptions = "詳細検索オプション",
     worldSearchFeaturedOnly = "注目ワールドのみ表示",
     worldSearchSortBy = "並び順",
@@ -96,7 +112,7 @@ internal val LocaleStringsJa = LocaleStrings(
     worldSearchResultCount = "表示件数",
     worldSearchResultsFormat = "%d件の結果",
 
-    // 並べ替えオプション
+    // Sort Options
     worldSearchSortPopularity = "人気度",
     worldSearchSortHeat = "熱度",
     worldSearchSortTrust = "信頼度",
@@ -156,6 +172,10 @@ internal val LocaleStringsJa = LocaleStrings(
     groupClosed = "閉鎖",
     groupRequestToJoin = "参加申請",
     groupTabDetails = "詳細",
+    groupTabPosts = "投稿",
+    groupNoPosts = "投稿なし",
+    loading = "読み込み中",
+    groupInstances = "グループインスタンス",
     groupTabMembers = "メンバー",
     groupTabGallery = "ギャラリー",
     groupOwner = "オーナー",
@@ -182,30 +202,32 @@ internal val LocaleStringsJa = LocaleStrings(
     groupLinks = "リンク",
     groupMembersTitle = "メンバー",
 
-    // UserProfile Sections
-    userTabBio = "自己紹介",
-    userTabGroups = "グループ",
-    userTabNote = "メモ",
-    userTabNoteHint = "タップしてメモを追加...",
-    userTabMutualGroups = "共通グループ",
+    // User Note
+    userNoteEditTitle = "メモを編集",
+    userNoteSaved = "メモを保存しました",
 
-    // Boop & Invite
+    // Local profile actions
+    userMutualGroups = "共通グループ",
     profileBoop = "Boop",
     profileInviteToMyInstance = "自分のインスタンスに招待",
-
-    // Recent Worlds
     recentWorldsTitle = "最近のワールド",
     recentWorldsEmpty = "最近のワールドはありません",
-
-    // Avatar
     avatars = "アバター",
     friendListPagerAllAvatars = "すべてのアバター",
-    avatarDescription = "説明",
-    avatarAuthor = "作者",
-    avatarVersion = "バージョン",
-    avatarCreatedAt = "作成日時",
-    avatarUpdatedAt = "更新日時",
-    avatarPlatforms = "プラットフォーム",
-    avatarPerformance = "パフォーマンス",
-    avatarTags = "タグ",
+
+    // User Created Worlds & Avatars
+    userCreatedWorlds = "作成したワールド",
+    userCreatedAvatars = "作成したアバター",
+    userCreatedWorldsCount = "ワールド: %d",
+    userCreatedAvatarsCount = "アバター: %d",
+    userCreatedLoading = "読み込み中...",
+    userCreatedEmpty = "アイテムなし",
+    userFavoritedWorlds = "お気に入りのワールド",
+
+    // Avatar Profile
+    avatarProfileVersion = "バージョン",
+    avatarProfileStatus = "ステータス",
+    avatarProfileCreated = "作成日",
+    avatarProfileUpdated = "更新日",
+    avatarProfilePlatforms = "対応プラットフォーム",
 )

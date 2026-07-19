@@ -97,6 +97,10 @@ kotlin {
             implementation(libs.voyager.transitions)
             implementation(libs.voyager.koin)
         }
+
+        commonTest.dependencies {
+            implementation(kotlin("test"))
+        }
     }
 }
 
@@ -191,4 +195,3 @@ compose.desktop {
         }
     }
 }
-

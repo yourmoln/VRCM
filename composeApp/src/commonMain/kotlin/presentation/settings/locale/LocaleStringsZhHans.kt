@@ -47,6 +47,22 @@ internal val LocaleStringsZhHans = LocaleStrings(
     profileViewGallery = "查看图库",
     profileViewMutualFriends = "查看共同好友",
     profileViewFriendNetwork = "查看好友关系网",
+    profileEditProfile = "编辑资料",
+    editProfileTitle = "编辑资料",
+    editProfileStatus = "社交状态",
+    editProfileStatusDescription = "状态描述",
+    editProfileStatusType = "状态类型",
+    editProfilePronouns = "人称代词",
+    editProfileBio = "个人简介",
+    editProfileLanguage = "语言",
+    editProfileAddLanguage = "添加语言",
+    editProfileLanguageHint = "最多 3 种语言，点击可移除。",
+    editProfileSave = "保存",
+    editProfileStatusOnline = "在线",
+    editProfileStatusJoinMe = "欢迎加入",
+    editProfileStatusAskMe = "忙碌",
+    editProfileStatusBusy = "请勿打扰",
+    editProfileUpdateSuccess = "资料已更新",
     mutualFriendsTitle = "共同好友",
     mutualFriendsEmpty = "与%s暂无共同好友",
     mutualFriendsCount = "共同好友：%total%",
@@ -86,7 +102,7 @@ internal val LocaleStringsZhHans = LocaleStrings(
     instanceCreateSuccessButInviteFailed = "创建房间成功，但邀请失败",
     instanceCreateFailed = "创建房间失败",
 
-    // 世界搜索相关
+    // World Search
     worldSearchAdvancedOptions = "高级搜索选项",
     worldSearchFeaturedOnly = "仅显示精选世界",
     worldSearchSortBy = "排序方式",
@@ -96,7 +112,7 @@ internal val LocaleStringsZhHans = LocaleStrings(
     worldSearchResultCount = "显示数量",
     worldSearchResultsFormat = "%d个结果",
 
-    // 排序选项
+    // Sort Options
     worldSearchSortPopularity = "流行度",
     worldSearchSortHeat = "热度",
     worldSearchSortTrust = "信任度",
@@ -156,6 +172,10 @@ internal val LocaleStringsZhHans = LocaleStrings(
     groupClosed = "已关闭",
     groupRequestToJoin = "申请加入",
     groupTabDetails = "详情",
+    groupTabPosts = "帖子",
+    groupNoPosts = "暂无帖子",
+    loading = "加载中",
+    groupInstances = "群组房间",
     groupTabMembers = "成员",
     groupTabGallery = "相册",
     groupOwner = "群主",
@@ -182,30 +202,32 @@ internal val LocaleStringsZhHans = LocaleStrings(
     groupLinks = "链接",
     groupMembersTitle = "成员",
 
-    // UserProfile Sections
-    userTabBio = "简介",
-    userTabGroups = "群组",
-    userTabNote = "备注",
-    userTabNoteHint = "点击添加备注...",
-    userTabMutualGroups = "共同群组",
+    // User Note
+    userNoteEditTitle = "编辑备注",
+    userNoteSaved = "备注已保存",
 
-    // Boop & Invite
+    // Local profile actions
+    userMutualGroups = "共同群组",
     profileBoop = "戳一下",
     profileInviteToMyInstance = "邀请来我的实例",
-
-    // Recent Worlds
     recentWorldsTitle = "最近访问的世界",
     recentWorldsEmpty = "暂无最近访问的世界",
-
-    // Avatar
     avatars = "模型",
     friendListPagerAllAvatars = "全部模型",
-    avatarDescription = "描述",
-    avatarAuthor = "作者",
-    avatarVersion = "版本",
-    avatarCreatedAt = "创建时间",
-    avatarUpdatedAt = "更新时间",
-    avatarPlatforms = "平台",
-    avatarPerformance = "性能",
-    avatarTags = "标签",
+
+    // User Created Worlds & Avatars
+    userCreatedWorlds = "创建的世界",
+    userCreatedAvatars = "创建的模型",
+    userCreatedWorldsCount = "世界: %d",
+    userCreatedAvatarsCount = "模型: %d",
+    userCreatedLoading = "加载中...",
+    userCreatedEmpty = "暂无内容",
+    userFavoritedWorlds = "收藏的世界",
+
+    // Avatar Profile
+    avatarProfileVersion = "版本",
+    avatarProfileStatus = "状态",
+    avatarProfileCreated = "创建时间",
+    avatarProfileUpdated = "更新时间",
+    avatarProfilePlatforms = "支持平台",
 )

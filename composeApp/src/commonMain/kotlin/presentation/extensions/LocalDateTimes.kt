@@ -2,7 +2,10 @@ package io.github.vrcmteam.vrcm.presentation.extensions
 
 import kotlinx.datetime.*
 import kotlinx.datetime.format.char
+import kotlin.time.Clock
+import kotlin.time.ExperimentalTime
 
+@OptIn(ExperimentalTime::class)
 val LocalDateTime.ignoredFormat: String
     get() = format(
         LocalDateTime.Format {

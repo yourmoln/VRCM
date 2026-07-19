@@ -6,6 +6,8 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupGalleryImage
 import io.github.vrcmteam.vrcm.network.api.groups.data.GroupMember
+import io.github.vrcmteam.vrcm.network.api.groups.data.GroupPost
+import io.github.vrcmteam.vrcm.network.api.instances.data.InstanceData
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
@@ -13,10 +15,13 @@ import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.service.AuthService
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.coroutineScope
 import org.koin.core.logger.Logger
 
 class GroupProfileScreenModel(
@@ -38,6 +43,21 @@ class GroupProfileScreenModel(
     private val _galleryImages = MutableStateFlow<Map<String, List<GroupGalleryImage>>>(emptyMap())
     val galleryImages: StateFlow<Map<String, List<GroupGalleryImage>>> = _galleryImages.asStateFlow()
 
+    private val _posts = MutableStateFlow<List<GroupPost>>(emptyList())
+    val posts: StateFlow<List<GroupPost>> = _posts.asStateFlow()
+
+    private val _postAuthors = MutableStateFlow<Map<String, String>>(emptyMap())
+    val postAuthors: StateFlow<Map<String, String>> = _postAuthors.asStateFlow()
+
+    private val _postsLoading = MutableStateFlow(false)
+    val postsLoading: StateFlow<Boolean> = _postsLoading.asStateFlow()
+
+    private val _membersLoading = MutableStateFlow(false)
+    val membersLoading: StateFlow<Boolean> = _membersLoading.asStateFlow()
+
+    private val _groupInstances = MutableStateFlow<List<InstanceData>>(emptyList())
+    val groupInstances: StateFlow<List<InstanceData>> = _groupInstances.asStateFlow()
+
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
@@ -49,8 +69,17 @@ class GroupProfileScreenModel(
         _members.value = emptyList()
         _owner.value = null
         _galleryImages.value = emptyMap()
+        _posts.value = emptyList()
+        _postAuthors.value = emptyMap()
+        _postsLoading.value = true
+        _membersLoading.value = true
+        _groupInstances.value = emptyList()
         val groupId = groupProfileVo.groupId
-        if (_isLoading.value || groupId.isBlank()) return
+        if (_isLoading.value || groupId.isBlank()) {
+            _postsLoading.value = false
+            _membersLoading.value = false
+            return
+        }
         _isLoading.value = true
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
@@ -65,8 +94,17 @@ class GroupProfileScreenModel(
                 loadOwner(group.ownerId)
             }
             if (group != null) {
-                loadMembers(groupId)
-                loadGalleryImages(groupId, group.galleries)
+                coroutineScope {
+                    listOf(
+                        async { loadMembers(groupId) },
+                        async { loadPosts(groupId) },
+                        async { loadGroupInstances(groupId) },
+                        async { loadGalleryImages(groupId, group.galleries) }
+                    ).awaitAll()
+                }
+            } else {
+                _postsLoading.value = false
+                _membersLoading.value = false
             }
             _isLoading.value = false
         }
@@ -105,6 +143,7 @@ class GroupProfileScreenModel(
     }
 
     private suspend fun loadMembers(groupId: String) {
+        _membersLoading.value = true
         authService.reTryAuthCatching {
             groupsApi.getGroupMembers(groupId = groupId, n = 24, offset = 0)
         }.onSuccess {
@@ -112,6 +151,7 @@ class GroupProfileScreenModel(
         }.onFailure {
             logger.error(it.message.orEmpty())
         }
+        _membersLoading.value = false
     }
 
     private suspend fun loadOwner(ownerId: String) {
@@ -119,6 +159,50 @@ class GroupProfileScreenModel(
             usersApi.fetchUser(ownerId)
         }.onSuccess {
             _owner.value = it
+        }.onFailure {
+            logger.error(it.message.orEmpty())
+        }
+    }
+
+    private suspend fun loadPosts(groupId: String) {
+        _postsLoading.value = true
+        authService.reTryAuthCatching {
+            groupsApi.getGroupPosts(groupId = groupId, n = 20, offset = 0)
+        }.onSuccess { postData ->
+            _posts.value = postData.posts
+            val authorMap = mutableMapOf<String, String>()
+            val authorIds = postData.posts
+                .mapNotNull { it.authorId.takeIf { id -> id.isNotBlank() } }
+                .distinct()
+            // 用有限并发请求获取作者名（避免 429）
+            coroutineScope {
+                authorIds.chunked(5).forEach { chunk ->
+                    chunk.map { userId ->
+                        async {
+                            authService.reTryAuthCatching {
+                                usersApi.fetchUser(userId)
+                            }.getOrNull()?.displayName?.let { name -> userId to name }
+                        }
+                    }.awaitAll().forEach { result ->
+                        result?.let { (id, name) -> authorMap[id] = name }
+                    }
+                    // 增量更新 UI
+                    _postAuthors.value = authorMap.toMap()
+                }
+            }
+        }.onFailure {
+            logger.error(it.message.orEmpty())
+        }
+        _postsLoading.value = false
+    }
+
+    private suspend fun loadGroupInstances(groupId: String) {
+        val userId = authService.currentUser().id
+        if (userId.isBlank()) return
+        authService.reTryAuthCatching {
+            groupsApi.getGroupInstances(userId = userId, groupId = groupId)
+        }.onSuccess {
+            _groupInstances.value = it.instances
         }.onFailure {
             logger.error(it.message.orEmpty())
         }

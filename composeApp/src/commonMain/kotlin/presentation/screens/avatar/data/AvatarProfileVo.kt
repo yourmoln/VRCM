@@ -2,43 +2,55 @@ package io.github.vrcmteam.vrcm.presentation.screens.avatar.data
 
 import cafe.adriel.voyager.core.lifecycle.JavaSerializable
 import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
-import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarPerformance
-import io.github.vrcmteam.vrcm.network.api.worlds.data.UnityPackage
 
 data class AvatarProfileVo(
     val avatarId: String,
-    val name: String = "",
-    val description: String = "",
-    val imageUrl: String? = null,
+    val avatarName: String = "",
+    val avatarImageUrl: String? = null,
     val thumbnailImageUrl: String? = null,
+    val avatarDescription: String = "",
     val authorId: String = "",
     val authorName: String = "",
-    val tags: List<String> = emptyList(),
     val releaseStatus: String = "",
-    val version: Int = 0,
-    val featured: Boolean = false,
+    val tags: List<String> = emptyList(),
     val createdAt: String? = null,
     val updatedAt: String? = null,
-    val unityPackages: List<UnityPackage> = emptyList(),
-    val performance: AvatarPerformance? = null,
+    val version: Int? = null,
+    val platformInfos: List<AvatarPlatformInfo> = emptyList(),
 ) : JavaSerializable {
-
     constructor(avatar: AvatarData) : this(
         avatarId = avatar.id,
-        name = avatar.name,
-        description = avatar.description,
-        imageUrl = avatar.imageUrl,
+        avatarName = avatar.name,
+        avatarImageUrl = avatar.imageUrl,
         thumbnailImageUrl = avatar.thumbnailImageUrl,
+        avatarDescription = avatar.description.orEmpty(),
         authorId = avatar.authorId,
         authorName = avatar.authorName,
-        tags = avatar.tags.filter { it.startsWith("author_tag_") }
-            .map { it.substringAfter("author_tag_") },
         releaseStatus = avatar.releaseStatus,
-        version = avatar.version,
-        featured = avatar.featured,
+        tags = avatar.tags,
         createdAt = avatar.createdAt,
         updatedAt = avatar.updatedAt,
-        unityPackages = avatar.unityPackages,
-        performance = avatar.performance,
+        version = avatar.version,
+        platformInfos = avatar.unityPackages.map { pkg ->
+            AvatarPlatformInfo(
+                platform = pkg.platform ?: "unknown",
+                unityVersion = pkg.unityVersion,
+                performanceRating = pkg.performanceRating,
+            )
+        }.distinctBy { "${it.platform}/${it.unityVersion}" }
     )
+}
+
+data class AvatarPlatformInfo(
+    val platform: String,
+    val unityVersion: String? = null,
+    val performanceRating: String? = null,
+) : JavaSerializable {
+    val displayName: String
+        get() = buildString {
+            append(platform.replaceFirstChar { it.uppercase() })
+            unityVersion?.let { append("/$it") }
+        }
+    val ratingDisplay: String
+        get() = performanceRating?.replaceFirstChar { it.uppercase() } ?: "Unknown"
 }

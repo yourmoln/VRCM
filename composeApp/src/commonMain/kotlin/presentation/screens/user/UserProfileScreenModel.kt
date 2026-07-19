@@ -10,6 +10,11 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.attributes.BlueprintType
 import io.github.vrcmteam.vrcm.network.api.attributes.LocationType
 import io.github.vrcmteam.vrcm.network.api.attributes.NotificationType
+import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
+import io.github.vrcmteam.vrcm.network.api.avatars.AvatarsApi
+import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
+import io.github.vrcmteam.vrcm.network.api.favorite.FavoriteApi
+import io.github.vrcmteam.vrcm.network.api.attributes.FavoriteType
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
 import io.github.vrcmteam.vrcm.network.api.instances.InstancesApi
@@ -18,6 +23,10 @@ import io.github.vrcmteam.vrcm.network.api.notification.NotificationApi
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
+import io.github.vrcmteam.vrcm.network.api.users.data.UpdateUserInfoData
+import io.github.vrcmteam.vrcm.network.api.worlds.WorldsApi
+import io.github.vrcmteam.vrcm.network.api.worlds.data.FavoritedWorld
+import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.HomeInstanceVo
@@ -41,6 +50,9 @@ class UserProfileScreenModel(
     private val notificationApi: NotificationApi,
     private val logger: Logger,
     private val instancesApi: InstancesApi,
+    private val worldsApi: WorldsApi,
+    private val avatarsApi: AvatarsApi,
+    private val favoriteApi: FavoriteApi,
     private val inviteApi: InviteApi,
 ) : ScreenModel {
 
@@ -56,15 +68,28 @@ class UserProfileScreenModel(
     private val _userGroups = mutableStateOf<List<LimitedUserGroup>>(emptyList())
     val userGroups by _userGroups
 
-    private val _userNote = mutableStateOf("")
-    val userNote by _userNote
-
     private val _mutualGroups = mutableStateOf<List<LimitedUserGroup>>(emptyList())
     val mutualGroups by _mutualGroups
 
+    private val _createdWorlds = mutableStateOf<List<WorldData>>(emptyList())
+    val createdWorlds by _createdWorlds
+
+    private val _createdAvatars = mutableStateOf<List<AvatarData>>(emptyList())
+    val createdAvatars by _createdAvatars
+
+    private val _isLoadingWorlds = mutableStateOf(false)
+    val isLoadingWorlds by _isLoadingWorlds
+
+    private val _isLoadingAvatars = mutableStateOf(false)
+    val isLoadingAvatars by _isLoadingAvatars
+
+    private val _isLoadingFavoritedWorlds = mutableStateOf(false)
+
+    private val _favoritedWorlds = mutableStateOf<List<Pair<String, List<FavoritedWorld>>>>(emptyList())
+    val favoritedWorlds by _favoritedWorlds
+
     fun refreshUser(userId: String) =
         screenModelScope.launch(Dispatchers.IO) {
-            _userGroups.value = emptyList()
             _mutualGroups.value = emptyList()
             authService.reTryAuthCatching {
                 usersApi.fetchUserResponse(userId)
@@ -80,10 +105,66 @@ class UserProfileScreenModel(
                     .onFailure { handleError(it) }
                 _userJson.value = response.bodyAsText().pretty()
                 loadUserGroups(userId)
-                loadUserNote(userId)
             }
         }
 
+    fun updateUserProfile(
+        bio: String? = null,
+        bioLinks: List<String>? = null,
+        status: UserStatus? = null,
+        statusDescription: String? = null,
+        pronouns: String? = null,
+        languages: List<String>? = null,
+        successMessage: String = "Profile updated",
+    ) {
+        screenModelScope.launch(Dispatchers.IO) {
+            // 更新基本信息
+            authService.reTryAuthCatching {
+                usersApi.updateUserInfo(
+                    userId = userState.id,
+                    updateUserInfoData = UpdateUserInfoData(
+                        bio = bio,
+                        bioLinks = bioLinks,
+                        status = status,
+                        statusDescription = statusDescription,
+                        pronouns = pronouns,
+                    )
+                )
+            }.onFailure {
+                handleError(it)
+                return@launch
+            }
+
+            // 更新语言 tags
+            if (languages != null) {
+                val currentLangs = userState.tags
+                    .filter { it.startsWith("language_") }
+                    .map { it.removePrefix("language_") }
+                val toAdd = languages.filter { it !in currentLangs }
+                val toRemove = currentLangs.filter { it !in languages }
+
+                if (toAdd.isNotEmpty()) {
+                    authService.reTryAuthCatching {
+                        usersApi.addTags(userState.id, toAdd.map { "language_$it" })
+                    }.onFailure {
+                        handleError(it)
+                        return@launch
+                    }
+                }
+                if (toRemove.isNotEmpty()) {
+                    authService.reTryAuthCatching {
+                        usersApi.removeTags(userState.id, toRemove.map { "language_$it" })
+                    }.onFailure {
+                        handleError(it)
+                        return@launch
+                    }
+                }
+            }
+
+            SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
+            refreshUser(userState.id)
+        }
+    }
 
     suspend fun sendFriendRequest(userId: String, message: String): Boolean =
         friendAction(message) {
@@ -143,28 +224,125 @@ class UserProfileScreenModel(
         }
     }
 
-    private suspend fun loadUserNote(userId: String) {
-        if (_userState.value.isSelf) return
-        authService.reTryAuthCatching {
-            usersApi.getUserNotes(n = 100)
-        }.onSuccess { notes ->
-            val note = notes.firstOrNull { it.targetUserId == userId }
-            _userNote.value = note?.note.orEmpty()
-        }.onFailure {
-            // 加载备注失败不需要toast
-            logger.error("Load user note failed: ${it.message}")
+    /**
+     * 加载用户创建的世界列表
+     * 先用搜索API快速展示卡片，再懒加载description
+     */
+    fun loadCreatedWorlds(userId: String) {
+        if (_isLoadingWorlds.value) return
+        if (_createdWorlds.value.isNotEmpty()) return
+        _isLoadingWorlds.value = true
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                val isSelf = userState.isSelf
+                val allWorlds = mutableListOf<WorldData>()
+                worldsApi.userWorldsFlow(
+                    user = if (isSelf) "me" else null,
+                    userId = if (isSelf) null else userId,
+                    sort = "updated",
+                    order = "descending",
+                    releaseStatus = if (isSelf) "all" else "public",
+                    n = 100,
+                ).collect { worldList ->
+                    allWorlds.addAll(worldList)
+                }
+                // 展示列表
+                _createdWorlds.value = allWorlds
+                _isLoadingWorlds.value = false
+
+                // 逐批获取完整详情以填充description
+                val worldIds = allWorlds.map { it.id }
+                if (worldIds.isNotEmpty()) {
+                    val fullWorlds = worldsApi.fetchWorldsByIds(worldIds)
+                    val fullMap = fullWorlds.associateBy { it.id }
+                    _createdWorlds.value = allWorlds.map { world ->
+                        fullMap[world.id] ?: world
+                    }
+                }
+            } catch (e: Exception) {
+                handleError(e)
+                _isLoadingWorlds.value = false
+            }
         }
     }
 
-    fun saveUserNote(userId: String, note: String) {
+    /**
+     * 加载用户创建的模型列表
+     * 注意：VRChat API 仅支持 user=me 查询自己的模型，不支持查询他人模型
+     */
+    fun loadCreatedAvatars() {
+        if (_isLoadingAvatars.value) return
+        if (!userState.isSelf) return
+        if (_createdAvatars.value.isNotEmpty()) return
+        _isLoadingAvatars.value = true
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                val allAvatars = mutableListOf<AvatarData>()
+                avatarsApi.avatarsFlow(
+                    user = "me",
+                    sort = "updated",
+                    order = "descending",
+                    releaseStatus = "all",
+                    n = 50,
+                ).collect { avatarList ->
+                    allAvatars.addAll(avatarList)
+                    _createdAvatars.value = allAvatars.toList()
+                }
+            } catch (e: Exception) {
+                handleError(e)
+            }
+            _isLoadingAvatars.value = false
+        }
+    }
+
+    /**
+     * 加载用户收藏的世界列表（按分组并行获取）
+     */
+    fun loadFavoritedWorlds(userId: String) {
+        if (_isLoadingFavoritedWorlds.value) return
+        _isLoadingFavoritedWorlds.value = true
+        screenModelScope.launch(Dispatchers.IO) {
+            try {
+                val groups = authService.reTryAuthCatching {
+                    favoriteApi.getFavoriteGroupsByType(
+                        favoriteType = FavoriteType.World,
+                        ownerId = userId,
+                        n = 100
+                    )
+                }.getOrNull() ?: run {
+                    _isLoadingFavoritedWorlds.value = false
+                    return@launch
+                }
+
+                val deferreds = groups.map { group ->
+                    async {
+                        runCatching {
+                            authService.reTryAuthCatching {
+                                worldsApi.getFavoritedWorlds(
+                                    ownerId = userId,
+                                    userId = userId,
+                                    tag = group.name,
+                                    n = 100
+                                )
+                            }.getOrNull()?.takeIf { it.isNotEmpty() }?.let { group.displayName to it }
+                        }.getOrNull()
+                    }
+                }
+                _favoritedWorlds.value = deferreds.mapNotNull { it.await() }.toMutableList()
+            } catch (_: Exception) {}
+            _isLoadingFavoritedWorlds.value = false
+        }
+    }
+
+    fun saveUserNote(note: String, successMessage: String) {
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
-                usersApi.updateUserNote(userId, note)
-            }.onSuccess {
-                _userNote.value = it.note
-                SharedFlowCentre.toastText.emit(ToastText.Success("Note saved"))
+                usersApi.saveUserNote(userState.id, note)
             }.onFailure {
                 handleError(it)
+            }.onSuccess {
+                _userState.value = _userState.value.copy(note = note)
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
             }
         }
     }
@@ -184,10 +362,9 @@ class UserProfileScreenModel(
     fun inviteToMyInstance(userId: String) {
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
-                val currentUserData = authService.currentUser()
-                val instanceLocation = currentUserData.presence.instance
-                if (instanceLocation.isEmpty()) {
-                    error("You are not in an instance")
+                val instanceLocation = authService.currentUser().presence.instance
+                require(instanceLocation.isNotBlank() && instanceLocation != "offline") {
+                    "You are not in an instance"
                 }
                 inviteApi.inviteUser(userId, instanceLocation)
             }.onSuccess {

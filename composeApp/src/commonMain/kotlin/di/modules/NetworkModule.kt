@@ -29,8 +29,8 @@ import org.koin.core.module.dsl.singleOf
 import org.koin.dsl.module
 
 internal val networkModule = module(true) {
-    singleOf(::AvatarsApi)
     singleOf(::AuthApi)
+    singleOf(::AvatarsApi)
     singleOf(::FileApi)
     singleOf(::FriendsApi)
     singleOf(::InstancesApi)

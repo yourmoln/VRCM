@@ -56,6 +56,7 @@ import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
+import io.github.vrcmteam.vrcm.core.algorithms.ForceLayoutResult
 import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
 import io.github.vrcmteam.vrcm.presentation.compoments.ABottomSheet
 import io.github.vrcmteam.vrcm.presentation.compoments.UserStateIcon
@@ -65,12 +66,8 @@ import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import kotlinx.datetime.Instant
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.toLocalDateTime
-import kotlin.math.PI
-import kotlin.math.cos
-import kotlin.math.min
+import kotlin.time.ExperimentalTime
 import kotlin.math.roundToInt
-import kotlin.math.sin
-import kotlin.math.sqrt
 
 object FriendNetworkScreen : Screen {
 
@@ -85,8 +82,10 @@ object FriendNetworkScreen : Screen {
         var showSheet by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
 
+        val density = LocalDensity.current
+        val nodeSizePx = with(density) { (43.dp + 34.dp).toPx() }
         LaunchedEffect(Unit) {
-            model.loadCache()
+            model.loadCache(nodeSizePx)
         }
 
         val nodeMap = remember(state.nodes) { state.nodes.associateBy { it.id } }
@@ -121,7 +120,7 @@ object FriendNetworkScreen : Screen {
                     actions = {
                         IconButton(
                             enabled = !state.isLoading,
-                            onClick = { model.refresh() }
+                            onClick = { model.refresh(nodeSizePx) }
                         ) {
                             Icon(
                                 painter = rememberVectorPainter(AppIcons.Update),
@@ -153,11 +152,13 @@ object FriendNetworkScreen : Screen {
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.outline
                         )
-                    } else {
+                    } else if (state.layout != null) {
+                        val layout = state.layout
                         FriendNetworkGraph(
                             nodes = state.nodes,
                             edges = state.edges,
-                            selfId = state.selfId,
+                            nodeColors = state.nodeColors,
+                            layout = layout,
                             highlightIds = highlightIds,
                             selectedId = selectedId,
                             highlightId = highlightId,
@@ -241,7 +242,8 @@ private fun FriendNetworkHeader(
 private fun FriendNetworkGraph(
     nodes: List<MutualFriendData>,
     edges: Map<String, List<String>>,
-    selfId: String?,
+    nodeColors: Map<String, Color>,
+    layout: ForceLayoutResult,
     highlightIds: Set<String>,
     selectedId: String?,
     highlightId: String?,
@@ -250,23 +252,16 @@ private fun FriendNetworkGraph(
 ) {
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val density = LocalDensity.current
-        val nodeSize = 42.dp
-        val nodeSizePx = with(density) { nodeSize.toPx() }
+        val baseNodeSize = 43.dp
+        val maxExtraSize = 34.dp
+        val baseNodeSizePx = with(density) { baseNodeSize.toPx() }
+        val maxExtraSizePx = with(density) { maxExtraSize.toPx() }
         val labelWidth = 88.dp
         val labelWidthPx = with(density) { labelWidth.toPx() }
         val viewWidthPx = with(density) { maxWidth.toPx() }
         val viewHeightPx = with(density) { maxHeight.toPx() }
-        val desiredSpacing = nodeSizePx * 3.8f
-        val ringSpacing = nodeSizePx * 3.2f
-        val maxRadius = estimateMaxRadius(
-            nodeCount = nodes.size - if (selfId == null) 0 else 1,
-            desiredSpacing = desiredSpacing,
-            ringSpacing = ringSpacing
-        )
-        val scaleFactor = maxOf(1f, sqrt(nodes.size.toFloat().coerceAtLeast(1f)) / 6f)
-        val requiredDiameter = maxRadius * 2f + desiredSpacing
-        val layoutWidthPx = maxOf(viewWidthPx * scaleFactor, requiredDiameter)
-        val layoutHeightPx = maxOf(viewHeightPx * scaleFactor, requiredDiameter)
+        val layoutWidthPx = layout.layoutWidthPx
+        val layoutHeightPx = layout.layoutHeightPx
         val minScale = 0.35f
         val maxScale = 3.5f
         val initialScale = maxOf(
@@ -275,32 +270,15 @@ private fun FriendNetworkGraph(
         ).coerceIn(minScale, 1.25f)
         var scale by remember(nodes.size, viewWidthPx, viewHeightPx) { mutableStateOf(initialScale) }
         var offset by remember(nodes.size, viewWidthPx, viewHeightPx) { mutableStateOf(Offset.Zero) }
-        var hasUserInteracted by remember(nodes.size, selfId) { mutableStateOf(false) }
+        var hasUserInteracted by remember(nodes.size) { mutableStateOf(false) }
         val edgeList = remember(edges) { buildEdgeList(edges) }
-        val positions = remember(
-            nodes,
-            layoutWidthPx,
-            layoutHeightPx,
-            selfId,
-            edgeList,
-            edges,
-        ) {
-            computeNodePositions(
-                nodes = nodes,
-                selfId = selfId,
-                layoutWidthPx = layoutWidthPx,
-                layoutHeightPx = layoutHeightPx,
-                mutualCounts = nodes.associate { it.id to edges[it.id].orEmpty().size },
-                desiredSpacing = desiredSpacing,
-                ringSpacing = ringSpacing,
-            )
-        }
+        // 计算每个节点的度数（连接数）
+        val nodeDegree = remember(edges) { nodes.associate { it.id to edges[it.id].orEmpty().size } }
+        val maxDegree = remember(nodeDegree) { nodeDegree.values.maxOrNull() ?: 1 }
+        val positions = layout.positions
         val viewCenter = Offset(viewWidthPx / 2f, viewHeightPx / 2f)
         val layoutCenter = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
-        val centeredOffset = run {
-            val selfPos = selfId?.let { positions[it] } ?: layoutCenter
-            viewCenter - (selfPos * initialScale)
-        }
+        val centeredOffset = viewCenter - (layoutCenter * initialScale)
         val renderScale = if (hasUserInteracted) scale else initialScale
         val renderOffset = if (hasUserInteracted) offset else centeredOffset
         val defaultColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
@@ -353,8 +331,10 @@ private fun FriendNetworkGraph(
                         val isHighlighted = highlightId != null &&
                             ((from == highlightId && highlightIds.contains(to)) ||
                                 (to == highlightId && highlightIds.contains(from)))
+                        // 使用社区颜色作为边的颜色
+                        val communityColor = nodeColors[from]?.copy(alpha = 0.4f) ?: defaultColor
                         drawLine(
-                            color = if (isHighlighted) highlightColor else defaultColor,
+                            color = if (isHighlighted) highlightColor else communityColor,
                             start = fromPos,
                             end = toPos,
                             strokeWidth = if (isHighlighted) 3f else 1.5f
@@ -364,9 +344,14 @@ private fun FriendNetworkGraph(
 
                 nodes.forEach { node ->
                     val pos = positions[node.id] ?: return@forEach
+                    // 根据连接数计算头像大小
+                    val degree = nodeDegree[node.id] ?: 0
+                    val sizeRatio = if (maxDegree > 0) degree.toFloat() / maxDegree else 0f
+                    val nodeSizeDp = with(density) { (baseNodeSizePx + maxExtraSizePx * sizeRatio).toDp() }
+                    val nodeSizePxLocal = baseNodeSizePx + maxExtraSizePx * sizeRatio
                     val offset = IntOffset(
                         x = (pos.x - labelWidthPx / 2).roundToInt(),
-                        y = (pos.y - nodeSizePx / 2).roundToInt()
+                        y = (pos.y - nodeSizePxLocal / 2).roundToInt()
                     )
                     val isHighlighted = highlightIds.isEmpty() || highlightIds.contains(node.id)
                     val alpha = if (isHighlighted) 1f else 0.35f
@@ -391,8 +376,9 @@ private fun FriendNetworkGraph(
                     ) {
                         FriendNetworkNode(
                             node = node,
-                            size = nodeSize,
-                            isSelected = node.id == selectedId
+                            size = nodeSizeDp,
+                            isSelected = node.id == selectedId,
+                            communityColor = nodeColors[node.id],
                         )
                     }
                 }
@@ -406,13 +392,18 @@ private fun FriendNetworkNode(
     node: MutualFriendData,
     size: androidx.compose.ui.unit.Dp,
     isSelected: Boolean,
+    communityColor: Color? = null,
 ) {
-    val borderColor = if (isSelected) MaterialTheme.colorScheme.primary else Color.Transparent
+    val borderColor = when {
+        isSelected -> MaterialTheme.colorScheme.primary
+        communityColor != null -> communityColor
+        else -> Color.Transparent
+    }
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             modifier = Modifier
                 .size(size)
-                .border(width = 2.dp, color = borderColor, shape = CircleShape)
+                .border(width = if (communityColor != null || isSelected) 3.dp else 2.dp, color = borderColor, shape = CircleShape)
                 .background(MaterialTheme.colorScheme.surface, CircleShape)
         ) {
             UserStateIcon(
@@ -543,68 +534,7 @@ private fun buildEdgeList(edges: Map<String, List<String>>): List<Pair<String, S
     return list
 }
 
-private fun estimateMaxRadius(
-    nodeCount: Int,
-    desiredSpacing: Float,
-    ringSpacing: Float,
-): Float {
-    if (nodeCount <= 0) return ringSpacing
-    var remaining = nodeCount
-    var radius = ringSpacing
-    var maxRadius = radius
-    while (remaining > 0) {
-        val circumference = 2f * PI.toFloat() * radius
-        val nodesOnRing = maxOf(6, (circumference / desiredSpacing).toInt())
-        remaining -= nodesOnRing
-        maxRadius = radius
-        radius += ringSpacing
-    }
-    return maxRadius
-}
-
-private fun computeNodePositions(
-    nodes: List<MutualFriendData>,
-    selfId: String?,
-    layoutWidthPx: Float,
-    layoutHeightPx: Float,
-    mutualCounts: Map<String, Int>,
-    desiredSpacing: Float,
-    ringSpacing: Float,
-): Map<String, Offset> {
-    if (nodes.isEmpty()) return emptyMap()
-    val center = Offset(layoutWidthPx / 2f, layoutHeightPx / 2f)
-    val orderedNodes = nodes.sortedWith(
-        compareByDescending<MutualFriendData> { it.id == selfId }
-            .thenByDescending { mutualCounts[it.id] ?: 0 }
-            .thenBy { it.displayName.lowercase() }
-    )
-    val others = orderedNodes.filter { it.id != selfId }
-    val positions = mutableMapOf<String, Offset>()
-
-    selfId?.let { positions[it] = center }
-
-    var radius = ringSpacing
-    var index = 0
-
-    while (index < others.size) {
-        val circumference = 2f * PI.toFloat() * radius
-        val nodesOnRing = maxOf(6, (circumference / desiredSpacing).toInt())
-        val count = min(nodesOnRing, others.size - index)
-        val angleStep = (2f * PI.toFloat()) / count
-        val startAngle = (index % maxOf(1, count)) * 0.15f
-        for (i in 0 until count) {
-            val angle = startAngle + i * angleStep
-            val x = center.x + radius * cos(angle.toDouble()).toFloat()
-            val y = center.y + radius * sin(angle.toDouble()).toFloat()
-            positions[others[index].id] = Offset(x, y)
-            index += 1
-        }
-        radius += ringSpacing
-    }
-
-    return positions
-}
-
+@OptIn(ExperimentalTime::class)
 private fun formatTimestamp(epochMillis: Long): String {
     val local = Instant.fromEpochMilliseconds(epochMillis).toLocalDateTime(TimeZone.currentSystemDefault())
     val hour = local.hour.toString().padStart(2, '0')

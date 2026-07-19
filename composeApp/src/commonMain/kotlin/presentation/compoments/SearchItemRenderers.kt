@@ -210,7 +210,16 @@ fun LazyItemScope.renderAvatarItem(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                remember { avatar.unityPackages.platformPackages.keys.sortedBy { it.name } }.forEach {
+                remember(avatar.unityPackages) {
+                    avatar.unityPackages.mapNotNull { pkg ->
+                        when (pkg.platform?.lowercase()) {
+                            "android" -> Android
+                            "ios" -> Ios
+                            "standalonewindows", "windows" -> Windows
+                            else -> null
+                        }
+                    }.distinct().sortedBy { it.name }
+                }.forEach {
                     val icon = when (it) {
                         Android -> AppIcons.Android
                         Ios -> AppIcons.Apple
@@ -225,4 +234,4 @@ fun LazyItemScope.renderAvatarItem(
             }
         }
     )
-} 
+}

@@ -8,6 +8,9 @@ import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
 import io.ktor.client.*
 import io.ktor.client.request.*
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
 
@@ -100,23 +103,55 @@ class WorldsApi(private val client: HttpClient)  {
     }
     
     /**
-     * 获取收藏的世界列表
-     * 
-     * @param featured 是否只显示精选世界
-     * @param sort 排序方式，默认为流行度
-     * @param n 返回结果数量，默认为60，最大100
-     * @param order 结果排序顺序，默认为降序
-     * @param offset 结果偏移量
-     * @param search 按世界名称搜索
-     * @param tag 包含的标签（逗号分隔）
-     * @param notag 排除的标签（逗号分隔）
-     * @param releaseStatus 根据发布状态过滤
-     * @param maxUnityVersion 资产支持的最大Unity版本
-     * @param minUnityVersion 资产支持的最小Unity版本
-     * @param platform 资产支持的平台
-     * @param userId 查看目标用户的信息（仅管理员）
-     * @return List<FavoritedWorld> 收藏的世界数据列表，包含收藏信息
+     * 批量获取完整世界详情（含 description 等搜索API不返回的字段）
+     * 使用分批并发请求（每批5个），避免触发 VRChat API 429 限流
+     *
+     * @param worldIds 世界ID列表
+     * @return List<WorldData> 成功获取的世界数据列表（失败的会被跳过）
      */
+    suspend fun fetchWorldsByIds(worldIds: List<String>): List<WorldData> {
+        return coroutineScope {
+            worldIds.chunked(5).flatMap { chunk ->
+                chunk.map { id ->
+                    async { runCatching { getWorldById(id) }.getOrNull() }
+                }.awaitAll().filterNotNull()
+            }
+        }
+    }
+
+    /**
+     * 流式获取用户创建的世界列表（自动分页）
+     *
+     * @param user 设置为 "me" 可查询自己的世界
+     * @param userId 根据用户ID过滤
+     * @param sort 排序方式，默认为更新时间
+     * @param order 排序顺序，默认为降序
+     * @param releaseStatus 发布状态过滤
+     * @param n 每页数量
+     * @return Flow<List<WorldData>> 世界数据列表流
+     */
+    fun userWorldsFlow(
+        userId: String? = null,
+        user: String? = null,
+        sort: String = "updated",
+        order: String = "descending",
+        releaseStatus: String = "public",
+        n: Int = 50,
+    ): Flow<List<WorldData>> = flow {
+        fetchDataList(offset = 0, n = n) { currentOffset, pageSize ->
+            searchWorld(
+                search = "",
+                sort = sort,
+                user = user,
+                userId = userId,
+                n = pageSize,
+                order = order,
+                offset = currentOffset,
+                releaseStatus = releaseStatus,
+            )
+        }
+    }
+
     suspend fun getFavoritedWorlds(
         featured: Boolean? = null,
         sort: String? = null,
@@ -130,7 +165,8 @@ class WorldsApi(private val client: HttpClient)  {
         maxUnityVersion: String? = null,
         minUnityVersion: String? = null,
         platform: String? = null,
-        userId: String? = null
+        userId: String? = null,
+        ownerId: String? = null
     ): List<FavoritedWorld> =
         client.get("$WORLDS_API_PREFIX/favorites") {
             parameter("n", n)
@@ -146,5 +182,6 @@ class WorldsApi(private val client: HttpClient)  {
             minUnityVersion?.let { parameter("minUnityVersion", it) }
             platform?.let { parameter("platform", it) }
             userId?.let { parameter("userId", it) }
+            ownerId?.let { parameter("ownerId", it) }
         }.checkSuccess()
 }

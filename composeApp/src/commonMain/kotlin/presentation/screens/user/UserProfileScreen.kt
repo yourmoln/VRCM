@@ -1,17 +1,28 @@
 package io.github.vrcmteam.vrcm.presentation.screens.user
 
-import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.animation.*
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.*
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -23,8 +34,6 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.getAppPlatform
 import io.github.vrcmteam.vrcm.network.api.attributes.FavoriteType
 import io.github.vrcmteam.vrcm.network.api.attributes.FriendRequestStatus.*
-import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
-import cafe.adriel.voyager.navigator.Navigator
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.extensions.currentNavigator
 import io.github.vrcmteam.vrcm.presentation.extensions.enableIf
@@ -36,6 +45,8 @@ import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.world.RecentWorldsScreen
+import io.github.vrcmteam.vrcm.presentation.screens.user.FriendNetworkScreen
+import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.components.FavoriteGroupBottomSheet
 import io.github.vrcmteam.vrcm.presentation.screens.world.data.WorldProfileVo
@@ -43,6 +54,13 @@ import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.LanguageIcons
 import io.github.vrcmteam.vrcm.presentation.supports.WebIcons
+import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
+import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
+import io.github.vrcmteam.vrcm.presentation.extensions.getInsetPadding
+import io.github.vrcmteam.vrcm.network.api.worlds.data.FavoritedWorld
+import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.data.AvatarProfileVo
 import kotlinx.coroutines.launch
 import org.koin.core.parameter.parametersOf
 
@@ -70,10 +88,11 @@ data class UserProfileScreen(
         val currentUser = userProfileScreenModel.userState
         val userGroups = userProfileScreenModel.userGroups
         val mutualGroups = userProfileScreenModel.mutualGroups
-        val userNote = userProfileScreenModel.userNote
         var bottomSheetIsVisible by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
         var openAlertDialog by remember { mutableStateOf(false) }
+        var openEditProfileDialog by remember { mutableStateOf(false) }
+        var openEditNoteDialog by remember { mutableStateOf(false) }
         // Control showing favorite group management for Friend type
         var showFriendFavoriteSheet by remember { mutableStateOf(false) }
         CompositionLocalProvider(LocalSharedSuffixKey provides sharedSuffixKey) {
@@ -83,15 +102,20 @@ data class UserProfileScreen(
                 iconUrl = currentUser.iconUrl,
                 onReturn = { currentNavigator.pop() },
                 onMenu = { bottomSheetIsVisible = true },
-            ) { ratio ->
+            ) { ratio, contentMinHeight ->
                 ProfileContent(
                     currentUser = currentUser,
                     friendLocation = userProfileScreenModel.friendLocation,
                     userGroups = userGroups,
                     mutualGroups = mutualGroups,
-                    userNote = userNote,
-                    onSaveNote = { note -> userProfileScreenModel.saveUserNote(currentUser.id, note) },
-                    ratio = ratio
+                    createdWorlds = userProfileScreenModel.createdWorlds,
+                    createdAvatars = userProfileScreenModel.createdAvatars,
+                    favoritedWorlds = userProfileScreenModel.favoritedWorlds,
+                    contentMinHeight = contentMinHeight,
+                    onLoadWorlds = { userProfileScreenModel.loadCreatedWorlds(userProfileVO.id) },
+                    onLoadAvatars = { userProfileScreenModel.loadCreatedAvatars() },
+                    onLoadFavoritedWorlds = { userProfileScreenModel.loadFavoritedWorlds(userProfileVO.id) },
+                    ratio = ratio,
                 )
             }
         }
@@ -108,7 +132,9 @@ data class UserProfileScreen(
                     if (!sheetState.isVisible) bottomSheetIsVisible = false
                 },
                 openAlertDialog = { openAlertDialog = true },
-                onManageFriendFavorite = { showFriendFavoriteSheet = true }
+                openEditProfileDialog = { openEditProfileDialog = true },
+                onManageFriendFavorite = { showFriendFavoriteSheet = true },
+                openEditNoteDialog = { openEditNoteDialog = true }
             )
         }
         // Friend FavoriteType group management bottom sheet
@@ -124,6 +150,36 @@ data class UserProfileScreen(
         ) {
             Text(text = userProfileScreenModel.userJson)
         }
+        // 编辑资料底部弹窗
+        val editSuccessMsg = strings.editProfileUpdateSuccess
+        EditProfileSheet(
+            isVisible = openEditProfileDialog,
+            currentUser = currentUser,
+            onDismiss = { openEditProfileDialog = false },
+            onStatusSave = { status, statusDescription ->
+                userProfileScreenModel.updateUserProfile(status = status, statusDescription = statusDescription, successMessage = editSuccessMsg)
+            },
+            onLanguageSave = { languages ->
+                userProfileScreenModel.updateUserProfile(languages = languages, successMessage = editSuccessMsg)
+            },
+            onPronounsSave = { pronouns ->
+                userProfileScreenModel.updateUserProfile(pronouns = pronouns, successMessage = editSuccessMsg)
+            },
+            onBioSave = { bio ->
+                userProfileScreenModel.updateUserProfile(bio = bio, successMessage = editSuccessMsg)
+            },
+        )
+        // 编辑备注弹窗
+        val noteSavedMsg = strings.userNoteSaved
+        EditNoteDialog(
+            isVisible = openEditNoteDialog,
+            initialNote = currentUser.note,
+            onDismiss = { openEditNoteDialog = false },
+            onSave = { note ->
+                userProfileScreenModel.saveUserNote(note, noteSavedMsg)
+                openEditNoteDialog = false
+            }
+        )
     }
 
 }
@@ -135,13 +191,22 @@ private fun ColumnScope.SheetItems(
     hideSheet: suspend () -> Unit,
     onHideCompletion: () -> Unit,
     openAlertDialog: () -> Unit,
+    openEditProfileDialog: () -> Unit,
     onManageFriendFavorite: () -> Unit,
+    openEditNoteDialog: () -> Unit,
 ) {
     val navigator = LocalNavigator.currentOrThrow
     val localeStrings = strings
     val scope = rememberCoroutineScope()
-    // 添加媒体库选项，只有当是自己的个人资料且是支持者时才显示
-    if (currentUser.isSelf && currentUser.isSupporter) {
+    // 只有当是自己的个人资料时才显示
+    if (currentUser.isSelf) {
+
+        SheetButtonItem(text = localeStrings.profileEditProfile, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                openEditProfileDialog()
+            }
+        })
 
         SheetButtonItem(text = localeStrings.profileViewGallery, onClick = {
             scope.launch { hideSheet() }.invokeOnCompletion {
@@ -150,16 +215,13 @@ private fun ColumnScope.SheetItems(
             }
         })
 
-    }
-
-    // 最近世界 - 仅自己可见
-    if (currentUser.isSelf) {
         SheetButtonItem(text = localeStrings.recentWorldsTitle, onClick = {
             scope.launch { hideSheet() }.invokeOnCompletion {
                 onHideCompletion()
                 navigator.push(RecentWorldsScreen)
             }
         })
+
     }
 
     // 管理好友收藏分组，仅当不是自己且是好友时显示
@@ -170,6 +232,27 @@ private fun ColumnScope.SheetItems(
                 onManageFriendFavorite()
             }
         })
+        SheetButtonItem(text = localeStrings.userNoteEditTitle, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                openEditNoteDialog()
+            }
+        })
+
+        if (currentUser.isFriend) {
+            SheetButtonItem(text = localeStrings.profileBoop, onClick = {
+                scope.launch { hideSheet() }.invokeOnCompletion {
+                    onHideCompletion()
+                    userProfileScreenModel.boop(currentUser.id)
+                }
+            })
+            SheetButtonItem(text = localeStrings.profileInviteToMyInstance, onClick = {
+                scope.launch { hideSheet() }.invokeOnCompletion {
+                    onHideCompletion()
+                    userProfileScreenModel.inviteToMyInstance(currentUser.id)
+                }
+            })
+        }
     }
 
     SheetButtonItem(
@@ -185,26 +268,6 @@ private fun ColumnScope.SheetItems(
             }
         }
     )
-
-    // Boop 按钮 - 仅好友可见
-    if (!currentUser.isSelf && currentUser.isFriend) {
-        SheetButtonItem(text = localeStrings.profileBoop, onClick = {
-            scope.launch { hideSheet() }.invokeOnCompletion {
-                onHideCompletion()
-                userProfileScreenModel.boop(currentUser.id)
-            }
-        })
-    }
-
-    // 邀请来我的实例 - 仅好友可见
-    if (!currentUser.isSelf && currentUser.isFriend) {
-        SheetButtonItem(text = localeStrings.profileInviteToMyInstance, onClick = {
-            scope.launch { hideSheet() }.invokeOnCompletion {
-                onHideCompletion()
-                userProfileScreenModel.inviteToMyInstance(currentUser.id)
-            }
-        })
-    }
 
     FriendRequestSheetItem(
         currentUser,
@@ -339,23 +402,33 @@ private fun JsonAlertDialog(
 }
 
 @Composable
-private fun ProfileContent(
+private fun ColumnScope.ProfileContent(
     currentUser: UserProfileVo?,
     friendLocation: FriendLocation?,
     userGroups: List<LimitedUserGroup>,
     mutualGroups: List<LimitedUserGroup>,
-    userNote: String,
-    onSaveNote: (String) -> Unit,
+    createdWorlds: List<WorldData>,
+    createdAvatars: List<AvatarData>,
+    favoritedWorlds: List<Pair<String, List<FavoritedWorld>>>,
+    contentMinHeight: Dp,
+    onLoadWorlds: () -> Unit,
+    onLoadAvatars: () -> Unit,
+    onLoadFavoritedWorlds: () -> Unit,
     ratio: Float,
 ) {
     if (currentUser == null) return
     val sharedSuffixKey = LocalSharedSuffixKey.current
-    val inverseRatio = 1 - ratio
     val navigator = currentNavigator
-    // 当上方图片完整显示时子内容自动滚动到顶部
-    if (inverseRatio == 0f) {
-        LaunchedEffect(Unit) {}
+
+    // 加载创建的世界和模型
+    LaunchedEffect(currentUser.id, currentUser.isSelf) {
+        onLoadWorlds()
+        onLoadFavoritedWorlds()
+        if (currentUser.isSelf) {
+            onLoadAvatars()
+        }
     }
+
     // TrustRank + UserName + VRC+
     UserInfoRow(user = currentUser, canCopy = true)
     UserPronouns(pronouns = currentUser.pronouns)
@@ -403,58 +476,712 @@ private fun ProfileContent(
         }
     }
 
-    // Bio + Groups 可滚动区域
-    val scrollState = rememberScrollState()
-    if (inverseRatio == 0f) {
-        LaunchedEffect(Unit) {
-            scrollState.animateScrollTo(0)
-        }
+    // 个人简介
+    BottomCardTab(
+        bioMinHeight = contentMinHeight,
+        userProfileVO = currentUser
+    )
+
+    if (!currentUser.isSelf) {
+        UserGroupsSection(
+            groups = mutualGroups,
+            title = strings.userMutualGroups,
+            onGroupClick = { group ->
+                navigator push GroupProfileScreen(
+                    groupProfileVo = GroupProfileVo(
+                        groupId = group.groupId,
+                        name = group.name,
+                        shortCode = group.shortCode,
+                        iconUrl = group.iconUrl,
+                        bannerUrl = group.bannerUrl,
+                        memberCount = group.memberCount,
+                    ),
+                    sharedSuffixKey = sharedSuffixKey
+                )
+            }
+        )
     }
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .verticalScroll(scrollState),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
-    ) {
-        // User Note (not for self)
-        if (!currentUser.isSelf) {
-            UserNoteSection(
-                note = userNote,
-                onSaveNote = onSaveNote,
+
+    UserGroupsSection(
+        groups = userGroups,
+        onGroupClick = { group ->
+            navigator push GroupProfileScreen(
+                groupProfileVo = GroupProfileVo(
+                    groupId = group.groupId,
+                    name = group.name,
+                    shortCode = group.shortCode,
+                    iconUrl = group.iconUrl,
+                    bannerUrl = group.bannerUrl,
+                    memberCount = group.memberCount,
+                ),
+                sharedSuffixKey = sharedSuffixKey
             )
         }
+    )
 
-        // Bio
-        if (currentUser.bio.isNotBlank()) {
-            SectionCard(
-                title = strings.userTabBio,
-                modifier = Modifier.fillMaxWidth()
+    // 创建的世界（在个人简介下方）
+    UserCreatedWorldsSection(
+        worlds = createdWorlds,
+        sharedSuffixKey = sharedSuffixKey,
+        onWorldClick = { world ->
+            navigator push WorldProfileScreen(
+                worldProfileVO = WorldProfileVo(world),
+                sharedSuffixKey = sharedSuffixKey
+            )
+        }
+    )
+
+    // 创建的模型（仅自己可见，在个人简介下方）
+    if (currentUser.isSelf) {
+        UserCreatedAvatarsSection(
+            avatars = createdAvatars,
+        )
+    }
+
+    // 收藏的世界（在创建的模型下方）
+    UserFavoritedWorldsSection(
+        groupedWorlds = favoritedWorlds,
+        sharedSuffixKey = sharedSuffixKey,
+        onWorldClick = { world ->
+            navigator push WorldProfileScreen(
+                worldProfileVO = WorldProfileVo(worldId = world.id, worldName = world.name, worldImageUrl = world.imageUrl, thumbnailImageUrl = world.thumbnailImageUrl, authorName = world.authorName),
+                sharedSuffixKey = sharedSuffixKey
+            )
+        }
+    )
+}
+
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun UserGroupsSection(
+    groups: List<LimitedUserGroup>,
+    title: String = strings.groups,
+    onGroupClick: (LimitedUserGroup) -> Unit,
+) {
+    if (groups.isEmpty()) return
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        LazyRow(
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            items(groups, key = { it.groupId }) { group ->
+                val index = groups.indexOfFirst { it.groupId == group.groupId }
+                val entranceModifier = rememberCardEntranceModifier(index)
+                Surface(
+                    modifier = entranceModifier
+                        .width(180.dp)
+                        .height(88.dp)
+                        .clip(MaterialTheme.shapes.large)
+                        .clickable { onGroupClick(group) },
+                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    contentColor = MaterialTheme.colorScheme.primary
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            GroupIcon(
+                                iconUrl = group.iconUrl,
+                                size = 36.dp,
+                                modifier = Modifier.sharedBoundsBy("${group.groupId}GroupIcon")
+                            )
+                            Column(
+                                verticalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Text(
+                                    modifier = Modifier.sharedBoundsBy("${group.groupId}GroupName"),
+                                    text = group.name,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                if (group.shortCode.isNotBlank()) {
+                                    Text(
+                                        text = "#${group.shortCode}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        Text(
+                            text = "${group.memberCount} ${strings.groupMembers}",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 区域标题（标题 + 可选计数）
+ */
+@Composable
+private fun SectionHeader(
+    title: String,
+    countText: String? = null,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.primary
+        )
+        if (countText != null) {
+            Text(
+                text = countText,
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+/**
+ * 卡片入场动画修饰符：淡入 + 向上滑入，根据 index 错开延迟（上限 5 项）
+ */
+@Composable
+private fun rememberCardEntranceModifier(index: Int): Modifier {
+    val alpha = remember { Animatable(0f) }
+    val offsetY = remember { Animatable(0f) }
+    val density = LocalDensity.current
+    val targetOffsetPx = with(density) { 24.dp.toPx() }
+    LaunchedEffect(Unit) {
+        offsetY.snapTo(targetOffsetPx)
+        kotlinx.coroutines.delay(minOf(index, 5) * 60L)
+        kotlinx.coroutines.coroutineScope {
+            launch {
+                alpha.animateTo(
+                    targetValue = 1f,
+                    animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                )
+            }
+            launch {
+                offsetY.animateTo(
+                    targetValue = 0f,
+                    animationSpec = tween(durationMillis = 350, easing = FastOutSlowInEasing)
+                )
+            }
+        }
+    }
+    return Modifier
+        .alpha(alpha.value)
+        .graphicsLayer { translationY = offsetY.value }
+}
+
+/**
+ * 堆叠卡片列表：多卡片重叠效果，点击跳转新页面展开
+ * @param detailTitle 新页面标题
+ * @param onNavigateToDetail 点击堆叠卡片时跳转到详情页
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun <T> StackedLocationCardList(
+    items: List<T>,
+    key: (T) -> Any,
+    imageUrl: (T) -> String?,
+    title: (T) -> String,
+    subtitle: (T) -> String,
+    detailTitle: String,
+    label: String? = null,
+    imageModifier: @Composable (T, Modifier) -> Modifier = { _, m -> m },
+    onClickItem: ((T) -> Unit)? = null,
+    onNavigateToDetail: (List<T>) -> Unit,
+) {
+    if (items.isEmpty()) return
+    val firstItem = items.first()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(128.dp)
+            .clip(MaterialTheme.shapes.large)
+            .then(rememberCardEntranceModifier(0))
+            .clickable {
+                if (items.size == 1) {
+                    onClickItem?.invoke(firstItem)
+                } else {
+                    onNavigateToDetail(items)
+                }
+            }
+    ) {
+        // 后方堆叠卡片（与 StackedCards 一致的堆叠方式）
+        val visibleCount = minOf(3, items.size)
+        for (i in visibleCount - 1 downTo 1) {
+            val baseOffset = 10.dp * i
+            val baseScale = 1f - (0.1f * i)
+            val baseAlpha = 1f - (0.25f * i)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(112.dp)
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer {
+                        translationY = -baseOffset.toPx()
+                        scaleX = baseScale
+                        scaleY = baseScale
+                        alpha = baseAlpha
+                    },
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surfaceVariant
+            ) {}
+        }
+
+        // 前方主卡片
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(112.dp)
+                .align(Alignment.BottomCenter),
+            tonalElevation = (-2).dp,
+            shape = MaterialTheme.shapes.large
+        ) {
+            Row(
+                modifier = Modifier.padding(8.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                SelectionContainer {
+                AImage(
+                    modifier = imageModifier(
+                        firstItem,
+                        Modifier
+                            .sharedBoundsBy("${detailTitle}_${key(firstItem)}_StackedImage")
+                            .weight(0.5f)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 16.dp, topEnd = 8.dp,
+                                    bottomStart = 16.dp, bottomEnd = 8.dp
+                                )
+                            )
+                    ),
+                    imageData = imageUrl(firstItem),
+                    contentDescription = null
+                )
+                Column(
+                    modifier = Modifier
+                        .weight(0.5f)
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
                     Text(
-                        text = currentUser.bio,
-                        style = MaterialTheme.typography.bodyMedium
+                        text = title(firstItem),
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        text = subtitle(firstItem),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 3,
+                        overflow = TextOverflow.Ellipsis,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                 }
             }
         }
 
-        // Mutual Groups
-        if (mutualGroups.isNotEmpty() && !currentUser.isSelf) {
-            GroupListSection(
-                title = strings.userTabMutualGroups,
-                groups = mutualGroups,
-                navigator = navigator,
-            )
+        // 标签气泡（左上角）
+        if (label != null) {
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(4.dp),
+                shape = MaterialTheme.shapes.small,
+                color = MaterialTheme.colorScheme.secondaryContainer
+            ) {
+                Text(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                    maxLines = 1
+                )
+            }
         }
 
-        // Groups
-        if (userGroups.isNotEmpty()) {
-            GroupListSection(
-                title = strings.userTabGroups,
-                groups = userGroups,
-                navigator = navigator,
+        // 剩余数量指示器（底部右侧，与 StackedCards 一致）
+        if (items.size > 1) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(bottom = 12.dp, end = 16.dp)
+                    .background(
+                        color = MaterialTheme.colorScheme.tertiary.copy(alpha = 0.8f),
+                        shape = CircleShape
+                    )
+                    .padding(horizontal = 8.dp, vertical = 4.dp)
+            ) {
+                Text(
+                    text = "+${items.size - 1}",
+                    color = MaterialTheme.colorScheme.onTertiary,
+                    style = MaterialTheme.typography.labelMedium
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 详情页顶部栏：标题居中，配色与用户界面下拉状态一致
+ */
+@Composable
+private fun DetailTopBar(
+    title: String,
+    sysTopPadding: Dp,
+    onReturn: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(top = sysTopPadding)
+                .height(56.dp)
+                .padding(horizontal = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            IconButton(onClick = onReturn) {
+                Icon(
+                    imageVector = AppIcons.ArrowBackIosNew,
+                    contentDescription = "Back",
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            }
+            Spacer(modifier = Modifier.weight(1f))
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = MaterialTheme.colorScheme.primary,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(horizontal = 16.dp)
             )
+            Spacer(modifier = Modifier.weight(1f))
+            // 占位，保持标题居中
+            Spacer(modifier = Modifier.size(48.dp))
+        }
+    }
+}
+
+/**
+ * 卡片列表项数据（可序列化，用于详情页）
+ */
+private data class CardItemVo(
+    val id: String,
+    val imageUrl: String?,
+    val thumbnailUrl: String?,
+    val title: String,
+    val subtitle: String,
+    val authorName: String = "",
+    val avatarData: AvatarData? = null,
+) : cafe.adriel.voyager.core.lifecycle.JavaSerializable
+
+/**
+ * 卡片导航类型
+ */
+private enum class CardScreenType : cafe.adriel.voyager.core.lifecycle.JavaSerializable {
+    WORLD, AVATAR, FAVORITED_WORLD
+}
+
+/**
+ * 卡片列表详情页（非泛型，仅携带可序列化数据）
+ */
+private class CardListDetailScreen(
+    private val title: String,
+    private val items: List<CardItemVo>,
+    private val sectionKey: String,
+    private val screenType: CardScreenType,
+    private val sharedSuffixKey: String = "",
+) : Screen {
+    @Composable
+    override fun Content() {
+        val navigator = currentNavigator
+        val sysTopPadding = getInsetPadding(WindowInsets::getTop)
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.surfaceContainerLow
+        ) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                DetailTopBar(
+                    title = title,
+                    sysTopPadding = sysTopPadding,
+                    onReturn = { navigator.pop() }
+                )
+                CardListContent(
+                    items = items,
+                    key = { it.id },
+                    imageUrl = { it.imageUrl ?: it.thumbnailUrl },
+                    itemTitle = { it.title },
+                    itemSubtitle = { it.subtitle },
+                    sectionKey = sectionKey,
+                    onClickItem = { item ->
+                        when (screenType) {
+                            CardScreenType.WORLD, CardScreenType.FAVORITED_WORLD -> {
+                                navigator push WorldProfileScreen(
+                                    worldProfileVO = WorldProfileVo(
+                                        worldId = item.id,
+                                        worldName = item.title,
+                                        worldImageUrl = item.imageUrl,
+                                        thumbnailImageUrl = item.thumbnailUrl,
+                                        authorName = item.authorName
+                                    ),
+                                    sharedSuffixKey = sharedSuffixKey
+                                )
+                            }
+                            CardScreenType.AVATAR -> {
+                                item.avatarData?.let { avatar ->
+                                    navigator push AvatarProfileScreen(
+                                        avatarProfileVo = AvatarProfileVo(avatar)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+/**
+ * 卡片列表详情页通用内容
+ */
+@Composable
+private fun <T> CardListContent(
+    items: List<T>,
+    key: (T) -> Any,
+    imageUrl: (T) -> String?,
+    itemTitle: (T) -> String,
+    itemSubtitle: (T) -> String,
+    sectionKey: String = "",
+    onClickItem: ((T) -> Unit)? = null,
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp, end = 16.dp,
+            top = 8.dp, bottom = getInsetPadding(12, WindowInsets::getBottom) + 16.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        items(items, key = key) { item ->
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(108.dp)
+                    .clip(MaterialTheme.shapes.large)
+                    .then(if (onClickItem != null) Modifier.clickable { onClickItem(item) } else Modifier),
+                tonalElevation = (-2).dp,
+                shape = MaterialTheme.shapes.large
+            ) {
+                Row(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    AImage(
+                        modifier = Modifier
+                            .sharedBoundsBy("${sectionKey}_${key(item)}_StackedImage")
+                            .weight(0.4f)
+                            .clip(
+                                RoundedCornerShape(
+                                    topStart = 16.dp, topEnd = 8.dp,
+                                    bottomStart = 16.dp, bottomEnd = 8.dp
+                                )
+                            ),
+                        imageData = imageUrl(item),
+                        contentDescription = null
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(0.6f)
+                            .padding(vertical = 4.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = itemTitle(item),
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = itemSubtitle(item),
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * 用户创建的世界列表组件
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+private fun UserCreatedWorldsSection(
+    worlds: List<WorldData>,
+    sharedSuffixKey: String = "",
+    onWorldClick: (WorldData) -> Unit,
+) {
+    if (worlds.isEmpty()) return
+    val navigator = currentNavigator
+    val createdWorldsTitle = strings.userCreatedWorlds
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SectionHeader(title = createdWorldsTitle)
+        StackedLocationCardList(
+            items = worlds,
+            key = { it.id },
+            imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+            title = { it.name },
+            subtitle = { it.description ?: "" },
+            detailTitle = createdWorldsTitle,
+            imageModifier = { item, modifier -> modifier.sharedBoundsBy("${item.id}WorldImage") },
+            onClickItem = onWorldClick,
+            onNavigateToDetail = { list ->
+                navigator push CardListDetailScreen(
+                    title = createdWorldsTitle,
+                    items = list.map { CardItemVo(
+                        id = it.id,
+                        imageUrl = it.thumbnailImageUrl ?: it.imageUrl,
+                        thumbnailUrl = it.thumbnailImageUrl,
+                        title = it.name,
+                        subtitle = it.description ?: "",
+                        authorName = it.authorName
+                    ) },
+                    sectionKey = createdWorldsTitle,
+                    screenType = CardScreenType.WORLD,
+                    sharedSuffixKey = sharedSuffixKey
+                )
+            }
+        )
+    }
+}
+
+/**
+ * 用户创建的模型列表组件
+ */
+@Composable
+private fun UserCreatedAvatarsSection(
+    avatars: List<AvatarData>,
+) {
+    if (avatars.isEmpty()) return
+    val navigator = currentNavigator
+    val createdAvatarsTitle = strings.userCreatedAvatars
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        SectionHeader(title = createdAvatarsTitle)
+        StackedLocationCardList(
+            items = avatars,
+            key = { it.id },
+            imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+            title = { it.name },
+            subtitle = { it.description ?: it.authorName },
+            detailTitle = createdAvatarsTitle,
+            onClickItem = { avatar ->
+                navigator push AvatarProfileScreen(
+                    avatarProfileVo = AvatarProfileVo(avatar)
+                )
+            },
+            onNavigateToDetail = { list ->
+                navigator push CardListDetailScreen(
+                    title = createdAvatarsTitle,
+                    items = list.map { CardItemVo(
+                        id = it.id,
+                        imageUrl = it.thumbnailImageUrl ?: it.imageUrl,
+                        thumbnailUrl = it.thumbnailImageUrl,
+                        title = it.name,
+                        subtitle = it.description?.takeIf { d -> d.isNotBlank() } ?: it.authorName,
+                        authorName = it.authorName,
+                        avatarData = it
+                    ) },
+                    sectionKey = createdAvatarsTitle,
+                    screenType = CardScreenType.AVATAR
+                )
+            }
+        )
+    }
+}
+
+/**
+ * 用户收藏的世界列表组件（按分组显示）
+ */
+@Composable
+private fun UserFavoritedWorldsSection(
+    groupedWorlds: List<Pair<String, List<FavoritedWorld>>>,
+    sharedSuffixKey: String = "",
+    onWorldClick: (FavoritedWorld) -> Unit,
+) {
+    if (groupedWorlds.isEmpty()) return
+    val navigator = currentNavigator
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        SectionHeader(title = strings.userFavoritedWorlds)
+        for ((groupName, worlds) in groupedWorlds) {
+            if (worlds.isEmpty()) continue
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                StackedLocationCardList(
+                    items = worlds,
+                    key = { it.id },
+                    imageUrl = { it.thumbnailImageUrl ?: it.imageUrl },
+                    title = { it.name },
+                    subtitle = { it.description?.takeIf { d -> d.isNotBlank() } ?: "${it.occupants ?: 0} 👤" },
+                    detailTitle = groupName,
+                    label = groupName,
+                    onClickItem = onWorldClick,
+                    onNavigateToDetail = { list ->
+                        navigator push CardListDetailScreen(
+                            title = groupName,
+                            items = list.map { CardItemVo(
+                                id = it.id,
+                                imageUrl = it.thumbnailImageUrl ?: it.imageUrl,
+                                thumbnailUrl = it.thumbnailImageUrl,
+                                title = it.name,
+                                subtitle = it.description?.takeIf { d -> d.isNotBlank() } ?: "${it.occupants ?: 0} 👤",
+                                authorName = it.authorName ?: ""
+                            ) },
+                            sectionKey = groupName,
+                            screenType = CardScreenType.FAVORITED_WORLD,
+                            sharedSuffixKey = sharedSuffixKey
+                        )
+                    }
+                )
+            }
         }
     }
 }
@@ -473,28 +1200,38 @@ fun UserPronouns(pronouns: String) {
 }
 
 @Composable
-private fun SectionCard(
-    title: String,
-    modifier: Modifier = Modifier,
-    content: @Composable ColumnScope.() -> Unit
+@OptIn(ExperimentalMaterial3Api::class)
+private fun BottomCardTab(
+    bioMinHeight: Dp = 0.dp,
+    userProfileVO: UserProfileVo,
 ) {
-    Card(
-        modifier = modifier,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
-        )
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall,
-                color = MaterialTheme.colorScheme.primary
-            )
-            content()
+        var state by remember { mutableStateOf(0) }
+        AnimatedContent(targetState = state) {
+            when (it) {
+                0 -> {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth().defaultMinSize(minHeight = bioMinHeight),
+                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        contentColor = MaterialTheme.colorScheme.primary,
+                        shape = MaterialTheme.shapes.extraLarge
+                    ) {
+                        SelectionContainer {
+                            Text(
+                                modifier = Modifier.padding(12.dp),
+                                text = userProfileVO.bio
+                            )
+                        }
+                    }
+                }
+
+                else -> {
+                    // TODO: 未来实现 Worlds/Groups 标签页
+                }
+            }
         }
     }
 }
@@ -586,124 +1323,6 @@ internal fun LanguagesRow(
     }
 }
 
-@Composable
-private fun UserNoteSection(
-    note: String,
-    onSaveNote: (String) -> Unit,
-) {
-    var isEditing by remember { mutableStateOf(false) }
-    var editText by remember(note) { mutableStateOf(note) }
-
-    SectionCard(
-        title = strings.userTabNote,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        if (isEditing) {
-            OutlinedTextField(
-                value = editText,
-                onValueChange = { editText = it },
-                modifier = Modifier.fillMaxWidth(),
-                textStyle = MaterialTheme.typography.bodyMedium,
-                minLines = 2,
-                maxLines = 5,
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.End,
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                TextButton(onClick = {
-                    editText = note
-                    isEditing = false
-                }) {
-                    Text(strings.cancel)
-                }
-                TextButton(onClick = {
-                    onSaveNote(editText)
-                    isEditing = false
-                }) {
-                    Text(strings.confirm)
-                }
-            }
-        } else {
-            Text(
-                text = note.ifEmpty { strings.userTabNoteHint },
-                style = MaterialTheme.typography.bodyMedium,
-                color = if (note.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
-                modifier = Modifier.fillMaxWidth().clickable { isEditing = true },
-            )
-        }
-    }
-}
-
-@Composable
-private fun GroupListSection(
-    title: String,
-    groups: List<LimitedUserGroup>,
-    navigator: Navigator,
-) {
-    SectionCard(
-        title = title,
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            groups.forEach { group ->
-                Surface(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable {
-                            navigator push GroupProfileScreen(
-                                groupProfileVo = GroupProfileVo(
-                                    groupId = group.groupId,
-                                    name = group.name,
-                                    shortCode = group.shortCode,
-                                    iconUrl = group.iconUrl,
-                                    bannerUrl = group.bannerUrl,
-                                    memberCount = group.memberCount,
-                                ),
-                            )
-                        },
-                    color = MaterialTheme.colorScheme.surfaceContainerLow,
-                ) {
-                    Row(
-                        modifier = Modifier.padding(12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        GroupIcon(
-                            iconUrl = group.iconUrl,
-                            size = 48.dp,
-                        )
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = group.name,
-                                style = MaterialTheme.typography.bodyMedium,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                            if (group.shortCode.isNotBlank()) {
-                                Text(
-                                    text = "#${group.shortCode}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    maxLines = 1
-                                )
-                            }
-                            Text(
-                                text = "${group.memberCount} ${strings.groupMembers}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1
-                            )
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun LinksRow(
@@ -742,6 +1361,53 @@ fun LinksRow(
                         contentDescription = "BioLinkIcon"
                     )
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun EditNoteDialog(
+    isVisible: Boolean,
+    initialNote: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+) {
+    if (!isVisible) return
+    val localeStrings = strings
+    var noteText by remember { mutableStateOf(initialNote) }
+    val maxLen = 256
+
+    ModalBottomSheet(
+        onDismissRequest = onDismiss,
+        sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+        ) {
+            EditHeader(localeStrings.userNoteEditTitle, onDismiss)
+            OutlinedTextField(
+                value = noteText,
+                onValueChange = { if (it.length <= maxLen) noteText = it },
+                modifier = Modifier.fillMaxWidth(),
+                maxLines = 8,
+                placeholder = {
+                    Text(
+                        localeStrings.userNoteEditTitle,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.5f)
+                    )
+                },
+                supportingText = { Text("${noteText.length}/$maxLen") },
+            )
+            Spacer(Modifier.height(16.dp))
+            Button(
+                onClick = { onSave(noteText) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(localeStrings.editProfileSave)
             }
         }
     }

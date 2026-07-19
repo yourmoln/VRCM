@@ -166,7 +166,8 @@ private inline fun MemberInfoRow(
                 if (!it) {
                     Row(
                         modifier = Modifier.fillMaxSize(),
-                        horizontalArrangement = Arrangement.spacedBy((-8).dp)
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(if (friendList.size == 1) 6.dp else (-8).dp)
                     ) {
                         friendList.take(5).forEach { friendState ->
                             UserStateIcon(
@@ -174,6 +175,15 @@ private inline fun MemberInfoRow(
                                     .align(Alignment.CenterVertically)
                                     .border(1.dp, MaterialTheme.colorScheme.surface, CircleShape),
                                 iconUrl = friendState.value.iconUrl,
+                            )
+                        }
+                        friendList.singleOrNull()?.let { friendState ->
+                            Text(
+                                text = friendState.value.displayName,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
