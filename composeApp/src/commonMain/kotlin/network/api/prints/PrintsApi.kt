@@ -32,12 +32,15 @@ class PrintsApi(private val client: HttpClient) {
         note: String = "",
         worldId: String? = null,
         worldName: String? = null,
-    ): PrintData =
-        client.submitFormWithBinaryData(
+    ): PrintData {
+        require(fileName.endsWith(".png", ignoreCase = true) && imageBytes.hasPngSignature()) {
+            "Print image must be a PNG file"
+        }
+        return client.submitFormWithBinaryData(
             url = PRINTS_API_PREFIX,
             formData = formData {
                 append("image", imageBytes, Headers.build {
-                    append(HttpHeaders.ContentType, imageMimeType(fileName))
+                    append(HttpHeaders.ContentType, ContentType.Image.PNG.toString())
                     append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
                 })
                 append("note", note)
@@ -46,34 +49,14 @@ class PrintsApi(private val client: HttpClient) {
                 worldName?.let { append("worldName", it) }
             }
         ).checkSuccess()
+    }
 
-    suspend fun editPrint(
-        printId: String,
-        imageBytes: ByteArray? = null,
-        fileName: String? = null,
-        note: String? = null,
-    ): PrintData =
-        client.submitFormWithBinaryData(
-            url = "$PRINTS_API_PREFIX/$printId",
-            formData = formData {
-                if (imageBytes != null && fileName != null) {
-                    append("image", imageBytes, Headers.build {
-                        append(HttpHeaders.ContentType, imageMimeType(fileName))
-                        append(HttpHeaders.ContentDisposition, "filename=\"$fileName\"")
-                    })
-                }
-                note?.let { append("note", it) }
-            }
-        ).checkSuccess()
+    private fun ByteArray.hasPngSignature(): Boolean = size >= PNG_SIGNATURE.size &&
+            PNG_SIGNATURE.indices.all { index -> this[index] == PNG_SIGNATURE[index] }
 
-    suspend fun deletePrint(printId: String) =
-        client.delete("$PRINTS_API_PREFIX/$printId").checkSuccess<Unit>()
-
-    private fun imageMimeType(fileName: String): String = when {
-        fileName.endsWith(".jpg", ignoreCase = true) ||
-                fileName.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
-        fileName.endsWith(".gif", ignoreCase = true) -> "image/gif"
-        fileName.endsWith(".bmp", ignoreCase = true) -> "image/bmp"
-        else -> "image/png"
+    private companion object {
+        val PNG_SIGNATURE = byteArrayOf(
+            0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
+        )
     }
 }

@@ -54,12 +54,20 @@ class RecentWorldsScreenModel(
     val endReached by _endReached
 
     private var pagingState = RecentWorldPagingState<WorldData>()
+    val loadMoreFailed: Boolean get() = pagingState.failedOffset != null
 
     fun loadRecentWorlds() {
         loadPage(reset = true)
     }
 
     fun loadMoreRecentWorlds() {
+        if (!pagingState.canAutoLoadNextPage()) return
+        loadPage(reset = false)
+    }
+
+    fun retryLoadMoreRecentWorlds() {
+        if (!loadMoreFailed) return
+        pagingState = prepareRecentWorldPageRetry(pagingState)
         loadPage(reset = false)
     }
 
@@ -88,6 +96,9 @@ class RecentWorldsScreenModel(
                 _worlds.value = pagingState.items
                 _endReached.value = pagingState.endReached
             }.onFailure {
+                if (!reset) {
+                    pagingState = markRecentWorldPageFailed(pagingState)
+                }
                 SharedFlowCentre.toastText.emit(ToastText.Error(it.message.toString()))
             }
             _isLoading.value = false
@@ -104,6 +115,7 @@ internal data class RecentWorldPagingState<T>(
     val items: List<T> = emptyList(),
     val nextOffset: Int = 0,
     val endReached: Boolean = false,
+    val failedOffset: Int? = null,
 )
 
 internal fun <T, K> appendRecentWorldPage(
@@ -116,6 +128,17 @@ internal fun <T, K> appendRecentWorldPage(
     nextOffset = current.nextOffset + page.size,
     endReached = page.size < pageSize,
 )
+
+internal fun <T> markRecentWorldPageFailed(
+    current: RecentWorldPagingState<T>,
+): RecentWorldPagingState<T> = current.copy(failedOffset = current.nextOffset)
+
+internal fun <T> prepareRecentWorldPageRetry(
+    current: RecentWorldPagingState<T>,
+): RecentWorldPagingState<T> = current.copy(failedOffset = null)
+
+internal fun <T> RecentWorldPagingState<T>.canAutoLoadNextPage(): Boolean =
+    failedOffset != nextOffset
 
 internal fun shouldLoadNextRecentWorldPage(
     lastVisibleIndex: Int,
@@ -177,7 +200,7 @@ object RecentWorldsScreen : Screen {
                     snapshotFlow {
                         val layoutInfo = listState.layoutInfo
                         val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-                        lastVisibleIndex to layoutInfo.totalItemsCount
+                        lastVisibleIndex to model.worlds.size
                     }.distinctUntilChanged().collect { (lastVisibleIndex, totalItemsCount) ->
                         if (shouldLoadNextRecentWorldPage(lastVisibleIndex, totalItemsCount)) {
                             model.loadMoreRecentWorlds()
@@ -200,13 +223,19 @@ object RecentWorldsScreen : Screen {
                             )
                         }
                     }
-                    if (model.isLoadingMore) {
+                    if (model.isLoadingMore || model.loadMoreFailed) {
                         item(key = "recent-worlds-loading") {
                             Box(
                                 modifier = Modifier.fillMaxWidth().padding(16.dp),
                                 contentAlignment = Alignment.Center,
                             ) {
-                                CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                if (model.isLoadingMore) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                } else {
+                                    TextButton(onClick = model::retryLoadMoreRecentWorlds) {
+                                        Text(strings.recentWorldsRetry)
+                                    }
+                                }
                             }
                         }
                     }

@@ -1,19 +1,30 @@
 package io.github.vrcmteam.vrcm.di.modules
 
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreenModel
-import org.koin.core.annotation.KoinInternalApi
-import org.koin.core.definition.Kind
+import org.koin.dsl.koinApplication
+import org.koin.dsl.module
 import kotlin.test.Test
-import kotlin.test.assertEquals
+import kotlin.test.assertNotSame
 
-@OptIn(KoinInternalApi::class)
 class PresentationModuleTest {
     @Test
     fun avatarProfileScreenModelUsesFactoryScope() {
-        val definition = presentationModule.mappings.values.single {
-            it.beanDefinition.primaryType == AvatarProfileScreenModel::class
+        val application = koinApplication {
+            modules(
+                presentationModule,
+                module {
+                    single<AvatarProfileLoader> {
+                        AvatarProfileLoader { Result.failure(IllegalStateException("unused")) }
+                    }
+                },
+            )
         }
 
-        assertEquals(Kind.Factory, definition.beanDefinition.kind)
+        val first = application.koin.get<AvatarProfileScreenModel>()
+        val second = application.koin.get<AvatarProfileScreenModel>()
+
+        assertNotSame(first, second)
+        application.close()
     }
 }

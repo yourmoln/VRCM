@@ -8,6 +8,8 @@ import coil3.request.crossfade
 import coil3.util.DebugLogger
 import io.github.vrcmteam.vrcm.presentation.screens.auth.AuthScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileLoader
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.NetworkAvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreenModel
@@ -31,6 +33,7 @@ import org.koin.core.module.Module
 import org.koin.core.module.dsl.factoryOf
 import org.koin.core.module.dsl.singleOf
 import org.koin.core.qualifier.named
+import org.koin.dsl.bind
 import org.koin.dsl.module
 
 val presentationModule: Module = module {
@@ -47,7 +50,8 @@ val presentationModule: Module = module {
     singleOf(::SearchListPagerModel)
     singleOf(::WorldProfileScreenModel)
     singleOf(::GroupProfileScreenModel)
-    factoryOf(::AvatarProfileScreenModel)
+    singleOf(::NetworkAvatarProfileLoader) bind AvatarProfileLoader::class
+    factory { AvatarProfileScreenModel(get()) }
     factoryOf(::RecentWorldsScreenModel)
     single<ImageLoader> { imageLoaderDefinition(it) }
     configThemeColor()

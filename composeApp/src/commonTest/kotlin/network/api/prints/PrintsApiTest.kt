@@ -12,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class PrintsApiTest {
     @Test
@@ -39,6 +40,36 @@ class PrintsApiTest {
 
         assertEquals("100", capturedN)
         assertEquals("0", capturedOffset)
+        client.close()
+    }
+
+    @Test
+    fun uploadPrintRejectsNonPngBytesBeforeSendingRequest() = runBlocking {
+        var requestCount = 0
+        val client = HttpClient(MockEngine) {
+            engine {
+                addHandler {
+                    requestCount++
+                    respond(
+                        content = "{\"id\":\"prnt_test\"}",
+                        status = HttpStatusCode.OK,
+                        headers = headersOf(HttpHeaders.ContentType, "application/json"),
+                    )
+                }
+            }
+            install(ContentNegotiation) {
+                json(Json { ignoreUnknownKeys = true })
+            }
+        }
+
+        assertFailsWith<IllegalArgumentException> {
+            PrintsApi(client).uploadPrint(
+                imageBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte()),
+                fileName = "photo.png",
+            )
+        }
+
+        assertEquals(0, requestCount)
         client.close()
     }
 }

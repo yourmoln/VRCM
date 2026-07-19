@@ -160,11 +160,6 @@ data class LocaleStrings(
     val galleryPrintUploading: String = "Uploading print...",
     val galleryPrintUploaded: String = "Print uploaded",
     val galleryPrintUploadFailed: String = "Print upload failed: %s",
-    val galleryPrintUpdating: String = "Updating print...",
-    val galleryPrintUpdated: String = "Print updated",
-    val galleryPrintUpdateFailed: String = "Print update failed: %s",
-    val galleryPrintDeleted: String = "Print deleted",
-    val galleryPrintDeleteFailed: String = "Print deletion failed: %s",
 
     // GalleryScreen
     val galleryScreenTitle: String = "Gallery",
@@ -228,6 +223,7 @@ data class LocaleStrings(
     val profileInviteNotInInstance: String = "You are not in an instance",
     val recentWorldsTitle: String = "Recent Worlds",
     val recentWorldsEmpty: String = "No recent worlds",
+    val recentWorldsRetry: String = "Retry",
     val avatars: String = "Avatars",
     val friendListPagerAllAvatars: String = "All Avatars",
 

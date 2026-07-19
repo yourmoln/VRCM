@@ -44,4 +44,19 @@ class RecentWorldPagingTest {
         assertFalse(shouldLoadNextRecentWorldPage(lastVisibleIndex = 3, totalItemsCount = 10))
         assertTrue(shouldLoadNextRecentWorldPage(lastVisibleIndex = 5, totalItemsCount = 10))
     }
+
+    @Test
+    fun failedOffsetCannotAutoLoadAgainUntilExplicitRetry() {
+        val failed = markRecentWorldPageFailed(
+            RecentWorldPagingState<String>(nextOffset = 50)
+        )
+
+        assertEquals(50, failed.nextOffset)
+        assertFalse(failed.canAutoLoadNextPage())
+
+        val retrying = prepareRecentWorldPageRetry(failed)
+
+        assertEquals(50, retrying.nextOffset)
+        assertTrue(retrying.canAutoLoadNextPage())
+    }
 }

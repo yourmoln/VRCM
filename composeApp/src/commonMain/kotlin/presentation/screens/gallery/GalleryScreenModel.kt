@@ -24,11 +24,6 @@ data class PrintActionMessages(
     val uploading: String,
     val uploaded: String,
     val uploadFailed: String,
-    val updating: String,
-    val updated: String,
-    val updateFailed: String,
-    val deleted: String,
-    val deleteFailed: String,
 )
 
 class GalleryScreenModel(
@@ -200,55 +195,6 @@ class GalleryScreenModel(
             }
         }
     }
-
-    fun editPrint(
-        printId: String,
-        imagePath: String,
-        messages: PrintActionMessages,
-        note: String? = null,
-    ) {
-        screenModelScope.launch(Dispatchers.IO) {
-            try {
-                SharedFlowCentre.toastText.emit(ToastText.Info(messages.updating))
-                val fileBytes = platform.readFileBytes(imagePath)
-                val fileName = imagePath.substringAfterLast('\\').substringAfterLast('/')
-
-                authService.reTryAuthCatching {
-                    printsApi.editPrint(printId, fileBytes, fileName, note)
-                }.onFailure {
-                    logger.error("Edit print failed: ${it.message}")
-                    SharedFlowCentre.toastText.emit(
-                        ToastText.Error(messages.updateFailed.replace("%s", it.message.orEmpty()))
-                    )
-                }.onSuccess {
-                    SharedFlowCentre.toastText.emit(ToastText.Success(messages.updated))
-                    refreshPrints()
-                }
-            } catch (e: Exception) {
-                SharedFlowCentre.toastText.emit(
-                    ToastText.Error(messages.updateFailed.replace("%s", e.message.orEmpty()))
-                )
-                logger.error("Edit print exception: ${e.message}")
-            }
-        }
-    }
-
-    fun deletePrint(printId: String, messages: PrintActionMessages) {
-        screenModelScope.launch(Dispatchers.IO) {
-            authService.reTryAuthCatching {
-                printsApi.deletePrint(printId)
-            }.onFailure {
-                logger.error("Delete print failed: ${it.message}")
-                SharedFlowCentre.toastText.emit(
-                    ToastText.Error(messages.deleteFailed.replace("%s", it.message.orEmpty()))
-                )
-            }.onSuccess {
-                SharedFlowCentre.toastText.emit(ToastText.Success(messages.deleted))
-                refreshPrints()
-            }
-        }
-    }
-
 
     /**
      * 根据文件名获取MIME类型

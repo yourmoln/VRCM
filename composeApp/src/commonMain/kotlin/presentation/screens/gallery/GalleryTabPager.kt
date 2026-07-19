@@ -66,13 +66,8 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
             uploading = strings.galleryPrintUploading,
             uploaded = strings.galleryPrintUploaded,
             uploadFailed = strings.galleryPrintUploadFailed,
-            updating = strings.galleryPrintUpdating,
-            updated = strings.galleryPrintUpdated,
-            updateFailed = strings.galleryPrintUpdateFailed,
-            deleted = strings.galleryPrintDeleted,
-            deleteFailed = strings.galleryPrintDeleteFailed,
         )
-        val imagePicker = rememberFilePickerLauncher(type = FileKitType.Image) { image ->
+        val imagePicker = rememberFilePickerLauncher(type = FileKitType.File("png")) { image ->
             if (image != null) {
                 coroutineScope.launch {
                     runCatching { image.readBytes() }
