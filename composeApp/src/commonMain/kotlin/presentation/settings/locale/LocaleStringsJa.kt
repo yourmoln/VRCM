@@ -181,4 +181,31 @@ internal val LocaleStringsJa = LocaleStrings(
     groupLanguages = "言語",
     groupLinks = "リンク",
     groupMembersTitle = "メンバー",
+
+    // UserProfile Sections
+    userTabBio = "自己紹介",
+    userTabGroups = "グループ",
+    userTabNote = "メモ",
+    userTabNoteHint = "タップしてメモを追加...",
+    userTabMutualGroups = "共通グループ",
+
+    // Boop & Invite
+    profileBoop = "Boop",
+    profileInviteToMyInstance = "自分のインスタンスに招待",
+
+    // Recent Worlds
+    recentWorldsTitle = "最近のワールド",
+    recentWorldsEmpty = "最近のワールドはありません",
+
+    // Avatar
+    avatars = "アバター",
+    friendListPagerAllAvatars = "すべてのアバター",
+    avatarDescription = "説明",
+    avatarAuthor = "作者",
+    avatarVersion = "バージョン",
+    avatarCreatedAt = "作成日時",
+    avatarUpdatedAt = "更新日時",
+    avatarPlatforms = "プラットフォーム",
+    avatarPerformance = "パフォーマンス",
+    avatarTags = "タグ",
 )

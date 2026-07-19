@@ -1,10 +1,13 @@
 package io.github.vrcmteam.vrcm.network.api.users
 
+import io.github.vrcmteam.vrcm.network.api.attributes.USER_NOTES_API_PREFIX
 import io.github.vrcmteam.vrcm.network.api.attributes.USERS_API_PREFIX
+import io.github.vrcmteam.vrcm.network.api.attributes.VRChatResponse
 import io.github.vrcmteam.vrcm.network.api.users.data.SearchUserData
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
+import io.github.vrcmteam.vrcm.network.api.users.data.UserNoteData
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
 import io.ktor.client.*
 import io.ktor.client.request.*
@@ -59,6 +62,31 @@ class UsersApi(private val client: HttpClient) {
         client.get("$USERS_API_PREFIX/$userId/mutuals/friends") {
             parameter("n", n)
             parameter("offset", offset)
+        }.checkSuccess()
+
+    suspend fun boop(userId: String): VRChatResponse =
+        client.post("$USERS_API_PREFIX/$userId/boop") {
+            // 规范要求 requestBody 必须存在(BoopRequest 各字段均可选),发送空对象表示普通 boop
+            contentType(ContentType.Application.Json)
+            setBody(emptyMap<String, String>())
+        }.checkSuccess()
+
+    suspend fun getUserNotes(
+        n: Int = 60,
+        offset: Int = 0,
+    ): List<UserNoteData> =
+        client.get(USER_NOTES_API_PREFIX) {
+            parameter("n", n)
+            parameter("offset", offset)
+        }.checkSuccess()
+
+    suspend fun updateUserNote(
+        targetUserId: String,
+        note: String,
+    ): UserNoteData =
+        client.post(USER_NOTES_API_PREFIX) {
+            contentType(ContentType.Application.Json)
+            setBody(mapOf("targetUserId" to targetUserId, "note" to note))
         }.checkSuccess()
 
 }

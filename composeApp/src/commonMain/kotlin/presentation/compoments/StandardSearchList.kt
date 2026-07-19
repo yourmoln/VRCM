@@ -4,9 +4,12 @@ import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
+import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
 import io.github.vrcmteam.vrcm.network.api.groups.data.LimitedGroup
 import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.presentation.extensions.currentNavigator
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreen
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.data.AvatarProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreen
@@ -18,7 +21,7 @@ import kotlinx.coroutines.launch
 
 /**
  * 标准搜索列表组件
- * 封装GenericSearchList，固定tabs为用户、世界，可选显示群组
+ * 封装GenericSearchList，固定tabs为用户、世界、模型，可选显示群组
  */
 @Composable
 fun StandardSearchList(
@@ -33,12 +36,13 @@ fun StandardSearchList(
     advancedOptionsContent: @Composable ((SearchTabType) -> Unit)? = null,
     userList: List<IUser> = emptyList(),
     worldList: List<WorldData> = emptyList(),
-    // 目前模型和群组功能可能还没实现，所以这里暂时留空
+    avatarList: List<AvatarData> = emptyList(),
+    // 目前群组功能可能还没实现，所以这里暂时留空
     modelContentBuilder: (LazyListScope.() -> Unit)? = null,
     groupContentBuilder: (LazyListScope.() -> Unit)? = null
 ) {
     // 固定的标签页列表
-    val tabs = listOf(strings.users, strings.worlds)
+    val tabs = listOf(strings.users, strings.worlds, strings.avatars)
     val coroutineScope = rememberCoroutineScope()
     val currentNavigator = currentNavigator
     val sharedSuffixKey = LocalSharedSuffixKey.current
@@ -64,7 +68,18 @@ fun StandardSearchList(
             }
         }
     }
-    
+    val onAvatarClick = { avatar: AvatarData ->
+        // 处理模型点击，导航到模型详情页面
+        if (currentNavigator.size <= 1) {
+            coroutineScope.launch {
+                currentNavigator push AvatarProfileScreen(
+                    avatarProfileVo = AvatarProfileVo(avatar),
+                    sharedSuffixKey = sharedSuffixKey
+                )
+            }
+        }
+    }
+
     // 将索引转换为对应的SearchTabType
     val selectedTabType = SearchTabType.fromIndex(selectedTabIndex)
 
@@ -96,10 +111,15 @@ fun StandardSearchList(
                     onWorldClick = onWorldClick
                 )
             }
-
+            SearchTabType.AVATAR.index -> { // 模型标签页
+                renderAvatarItems(
+                    avatars = avatarList,
+                    onAvatarClick = onAvatarClick
+                )
+            }
             SearchTabType.GROUP.index -> { // 群组标签页
                 groupContentBuilder?.invoke(this)
             }
         }
     }
-} 
+}

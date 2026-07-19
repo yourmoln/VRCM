@@ -6,7 +6,8 @@ package io.github.vrcmteam.vrcm.presentation.compoments
 enum class SearchTabType(val index: Int) {
     USER(0),    // 用户
     WORLD(1),   // 世界
-    GROUP(2);   // 群组
+    GROUP(2),   // 群组
+    AVATAR(3);  // 模型
     
     companion object {
         fun fromIndex(index: Int): SearchTabType {

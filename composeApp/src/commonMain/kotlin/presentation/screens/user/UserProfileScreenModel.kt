@@ -13,6 +13,7 @@ import io.github.vrcmteam.vrcm.network.api.attributes.NotificationType
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
 import io.github.vrcmteam.vrcm.network.api.instances.InstancesApi
+import io.github.vrcmteam.vrcm.network.api.invite.InviteApi
 import io.github.vrcmteam.vrcm.network.api.notification.NotificationApi
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
@@ -40,6 +41,7 @@ class UserProfileScreenModel(
     private val notificationApi: NotificationApi,
     private val logger: Logger,
     private val instancesApi: InstancesApi,
+    private val inviteApi: InviteApi,
 ) : ScreenModel {
 
     private val _userState = mutableStateOf(userProfileVO)
@@ -54,9 +56,16 @@ class UserProfileScreenModel(
     private val _userGroups = mutableStateOf<List<LimitedUserGroup>>(emptyList())
     val userGroups by _userGroups
 
+    private val _userNote = mutableStateOf("")
+    val userNote by _userNote
+
+    private val _mutualGroups = mutableStateOf<List<LimitedUserGroup>>(emptyList())
+    val mutualGroups by _mutualGroups
+
     fun refreshUser(userId: String) =
         screenModelScope.launch(Dispatchers.IO) {
             _userGroups.value = emptyList()
+            _mutualGroups.value = emptyList()
             authService.reTryAuthCatching {
                 usersApi.fetchUserResponse(userId)
             }.onFailure {
@@ -71,6 +80,7 @@ class UserProfileScreenModel(
                     .onFailure { handleError(it) }
                 _userJson.value = response.bodyAsText().pretty()
                 loadUserGroups(userId)
+                loadUserNote(userId)
             }
         }
 
@@ -125,10 +135,66 @@ class UserProfileScreenModel(
     private suspend fun loadUserGroups(userId: String) {
         authService.reTryAuthCatching {
             usersApi.getUserGroups(userId)
-        }.onSuccess {
-            _userGroups.value = it
+        }.onSuccess { groups ->
+            _userGroups.value = groups
+            _mutualGroups.value = groups.filter { it.mutualGroup }
         }.onFailure {
             handleError(it)
+        }
+    }
+
+    private suspend fun loadUserNote(userId: String) {
+        if (_userState.value.isSelf) return
+        authService.reTryAuthCatching {
+            usersApi.getUserNotes(n = 100)
+        }.onSuccess { notes ->
+            val note = notes.firstOrNull { it.targetUserId == userId }
+            _userNote.value = note?.note.orEmpty()
+        }.onFailure {
+            // 加载备注失败不需要toast
+            logger.error("Load user note failed: ${it.message}")
+        }
+    }
+
+    fun saveUserNote(userId: String, note: String) {
+        screenModelScope.launch(Dispatchers.IO) {
+            authService.reTryAuthCatching {
+                usersApi.updateUserNote(userId, note)
+            }.onSuccess {
+                _userNote.value = it.note
+                SharedFlowCentre.toastText.emit(ToastText.Success("Note saved"))
+            }.onFailure {
+                handleError(it)
+            }
+        }
+    }
+
+    fun boop(userId: String) {
+        screenModelScope.launch(Dispatchers.IO) {
+            authService.reTryAuthCatching {
+                usersApi.boop(userId)
+            }.onSuccess {
+                SharedFlowCentre.toastText.emit(ToastText.Success("Boop!"))
+            }.onFailure {
+                handleError(it)
+            }
+        }
+    }
+
+    fun inviteToMyInstance(userId: String) {
+        screenModelScope.launch(Dispatchers.IO) {
+            authService.reTryAuthCatching {
+                val currentUserData = authService.currentUser()
+                val instanceLocation = currentUserData.presence.instance
+                if (instanceLocation.isEmpty()) {
+                    error("You are not in an instance")
+                }
+                inviteApi.inviteUser(userId, instanceLocation)
+            }.onSuccess {
+                SharedFlowCentre.toastText.emit(ToastText.Success("Invite sent"))
+            }.onFailure {
+                handleError(it)
+            }
         }
     }
 

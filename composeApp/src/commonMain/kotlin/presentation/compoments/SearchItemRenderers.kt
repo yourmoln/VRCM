@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import io.github.vrcmteam.vrcm.core.extensions.toLocalDateTime
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
 import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
+import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
 import io.github.vrcmteam.vrcm.network.api.files.data.PlatformType.*
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
 import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
@@ -152,6 +153,76 @@ fun LazyItemScope.renderWorldItem(
                 }
             }
 
+        }
+    )
+}
+
+/**
+ * 模型列表渲染
+ */
+fun LazyListScope.renderAvatarItems(
+    avatars: List<AvatarData>,
+    onAvatarClick: (AvatarData) -> Unit
+) {
+    items(avatars, key = { it.id }) { avatar ->
+        renderAvatarItem(avatar, onAvatarClick)
+    }
+}
+
+/**
+ * 单个模型项渲染
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun LazyItemScope.renderAvatarItem(
+    avatar: AvatarData,
+    onAvatarClick: (AvatarData) -> Unit
+) {
+    SearchResultItem(
+        item = avatar,
+        onClick = onAvatarClick,
+        modifier = Modifier.animateItem(),
+        leadingContent = {
+            AImage(
+                modifier = Modifier.sharedBoundsBy("${avatar.id}AvatarImage").size(48.dp)
+                    .clip(MaterialTheme.shapes.medium),
+                imageData = avatar.thumbnailImageUrl,
+            )
+        },
+        headlineContent = {
+            Text(
+                text = avatar.name,
+                style = MaterialTheme.typography.titleMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1
+            )
+        },
+        supportingContent = {
+            Text(
+                text = avatar.authorName,
+                style = MaterialTheme.typography.bodyMedium,
+                maxLines = 1
+            )
+        },
+        trailingContent = {
+            // 显示模型平台类型
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                remember { avatar.unityPackages.platformPackages.keys.sortedBy { it.name } }.forEach {
+                    val icon = when (it) {
+                        Android -> AppIcons.Android
+                        Ios -> AppIcons.Apple
+                        Windows -> AppIcons.Windows
+                    }
+                    Icon(
+                        imageVector = icon,
+                        contentDescription = "PlatformIcon",
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
         }
     )
 } 

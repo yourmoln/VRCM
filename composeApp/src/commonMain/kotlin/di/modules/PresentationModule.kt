@@ -7,6 +7,7 @@ import coil3.network.ktor3.KtorNetworkFetcherFactory
 import coil3.request.crossfade
 import coil3.util.DebugLogger
 import io.github.vrcmteam.vrcm.presentation.screens.auth.AuthScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreenModel
@@ -16,6 +17,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.home.pager.SearchListPagerMo
 import io.github.vrcmteam.vrcm.presentation.screens.user.FriendNetworkScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.user.UserProfileScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.world.RecentWorldsScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.settings.SettingsModel
 import io.github.vrcmteam.vrcm.presentation.settings.theme.ThemeColor
@@ -45,6 +47,8 @@ val presentationModule: Module = module {
     singleOf(::SearchListPagerModel)
     singleOf(::WorldProfileScreenModel)
     singleOf(::GroupProfileScreenModel)
+    singleOf(::AvatarProfileScreenModel)
+    factoryOf(::RecentWorldsScreenModel)
     single<ImageLoader> { imageLoaderDefinition(it) }
     configThemeColor()
 }

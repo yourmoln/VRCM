@@ -142,25 +142,29 @@ android {
         val properties = Properties()
         properties.load(it.inputStream())
         val storeFilePath = properties.getProperty("store_file")
-         storeFile = if (storeFilePath.isNullOrEmpty()) null else file(storeFilePath)
+         storeFile = if (storeFilePath.isNullOrEmpty()) null else rootProject.file(storeFilePath)
          storePass = properties.getProperty("store_pass")
          keyAlias = properties.getProperty("key_alias")
          keyPass = properties.getProperty("key_pass")
     }
 
-    signingConfigs {
-        create("release") {
-            this.storeFile = storeFile
-            this.storePassword = storePass
-            this.keyAlias = keyAlias
-            this.keyPassword = keyPass
+    if (storeFile != null) {
+        signingConfigs {
+            create("release") {
+                this.storeFile = storeFile
+                this.storePassword = storePass
+                this.keyAlias = keyAlias
+                this.keyPassword = keyPass
+            }
         }
     }
 
     buildTypes {
         getByName("release") {
             this.isMinifyEnabled = false
-            this.signingConfig = signingConfigs.getByName("release")
+            if (storeFile != null) {
+                this.signingConfig = signingConfigs.getByName("release")
+            }
         }
         getByName("debug") {
             this.applicationIdSuffix = ".debug"

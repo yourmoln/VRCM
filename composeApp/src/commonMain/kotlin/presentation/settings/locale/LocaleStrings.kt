@@ -186,6 +186,33 @@ data class LocaleStrings(
     val groupLanguages: String = "Languages",
     val groupLinks: String = "Links",
     val groupMembersTitle: String = "Members",
+
+    // UserProfile Sections
+    val userTabBio: String = "Bio",
+    val userTabGroups: String = "Groups",
+    val userTabNote: String = "Note",
+    val userTabNoteHint: String = "Tap to add a note...",
+    val userTabMutualGroups: String = "Mutual Groups",
+
+    // Boop & Invite
+    val profileBoop: String = "Boop",
+    val profileInviteToMyInstance: String = "Invite to My Instance",
+
+    // Recent Worlds
+    val recentWorldsTitle: String = "Recent Worlds",
+    val recentWorldsEmpty: String = "No recent worlds",
+
+    // Avatar
+    val avatars: String = "Avatars",
+    val friendListPagerAllAvatars: String = "All Avatars",
+    val avatarDescription: String = "Description",
+    val avatarAuthor: String = "Author",
+    val avatarVersion: String = "Version",
+    val avatarCreatedAt: String = "Created At",
+    val avatarUpdatedAt: String = "Updated At",
+    val avatarPlatforms: String = "Platforms",
+    val avatarPerformance: String = "Performance",
+    val avatarTags: String = "Tags",
 )
 
 val strings: LocaleStrings

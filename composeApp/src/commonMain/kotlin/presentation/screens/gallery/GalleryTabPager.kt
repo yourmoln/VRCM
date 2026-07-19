@@ -8,16 +8,15 @@ import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Text
+import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -25,12 +24,16 @@ import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
+import io.github.vrcmteam.vrcm.core.extensions.selectImageFromGallery
+import io.github.vrcmteam.vrcm.getAppPlatform
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
+import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.Pager
+import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
 sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
@@ -54,66 +57,43 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         val navigator = LocalNavigator.currentOrThrow
 
 
-        RefreshBox(
-            isRefreshing = galleryScreenModel.isRefreshingByTag(tagType),
-            doRefresh = { galleryScreenModel.refreshFiles(tagType) }
-        ) {
-            val files = galleryScreenModel.getFilesByTag(tagType)
+        Box(modifier = Modifier.fillMaxSize()) {
+            RefreshBox(
+                isRefreshing = galleryScreenModel.isRefreshingByTag(tagType),
+                doRefresh = { galleryScreenModel.refreshFiles(tagType) }
+            ) {
+                val files = galleryScreenModel.getFilesByTag(tagType)
 
-            if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
-                EmptyContent(
-                    message = strings.galleryTabNoFiles.replace("%s", title),
-                )
-            } else {
-                Column(modifier = Modifier.fillMaxSize()) {
-                    // 如果是Gallery标签页，添加上传按钮
-//                    if (tagType == FileTagType.Gallery) {
-//                        // 上传按钮
-//                        Row(
-//                            modifier = Modifier
-//                                .fillMaxWidth()
-//                                .padding(horizontal = 16.dp, vertical = 8.dp),
-//                            horizontalArrangement = Arrangement.End
-//                        ) {
-//                            val coroutineScope = rememberCoroutineScope()
-//                            val platform = getAppPlatform()
-//
-//                            Button(
-//                                onClick = {
-//                                    coroutineScope.launch {
-//                                        // 从系统相册选择图片
-//                                        val imagePath = platform.selectImageFromGallery()
-//                                        if (imagePath != null) {
-//                                            // 打开图片编辑器进行裁剪
-//                                            navigator.push(
-//                                                ImageEditorScreen(
-//                                                    imagePath = imagePath,
-//                                                    fileTagType = tagType,
-//                                                ) { croppedImagePath ->
-//                                                    // 裁剪完成后上传图片
-//                                                    coroutineScope.launch {
-//                                                        SharedFlowCentre.toastText.emit(ToastText.Info("正在上传图片..."))
-//                                                        galleryScreenModel.uploadImage(croppedImagePath, tagType)
-//                                                    }
-//                                                }
-//                                            )
-//                                        }
-//                                    }
-//                                },
-//                                modifier = Modifier.padding(4.dp)
-//                            ) {
-//                                Icon(
-//                                    painter = rememberVectorPainter(AppIcons.SaveAlt),
-//                                    contentDescription = strings.galleryTabUploadImage,
-//                                    modifier = Modifier.size(20.dp)
-//                                )
-//                                Spacer(modifier = Modifier.width(4.dp))
-//                                Text(strings.galleryTabUploadImage)
-//                            }
-//                        }
-//                    }
-
+                if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
+                    EmptyContent(
+                        message = strings.galleryTabNoFiles.replace("%s", title),
+                    )
+                } else {
                     GalleryGrid(files, tagType)
+                }
+            }
+
+            // Print 标签页始终显示上传按钮（不受列表为空影响）
+            if (tagType == FileTagType.Print) {
+                val coroutineScope = rememberCoroutineScope()
+                val platform = getAppPlatform()
+                FloatingActionButton(
+                    onClick = {
+                        coroutineScope.launch {
+                            val imagePath = platform.selectImageFromGallery()
+                            if (imagePath != null) {
+                                galleryScreenModel.uploadPrint(imagePath)
+                            }
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomEnd)
+                        .padding(16.dp),
+                ) {
+                    Icon(
+                        painter = rememberVectorPainter(AppIcons.Add),
+                        contentDescription = strings.galleryTabUploadImage,
+                    )
                 }
             }
         }

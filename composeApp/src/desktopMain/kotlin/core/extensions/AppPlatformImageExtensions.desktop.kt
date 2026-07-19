@@ -7,7 +7,9 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import kotlin.coroutines.resume
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
@@ -49,32 +51,36 @@ actual suspend fun AppPlatform.saveImageToGallery(imageUrl: String, fileName: St
 /**
  * Desktop平台实现：从系统相册选择图片
  */
-actual suspend fun AppPlatform.selectImageFromGallery(): String? = withContext(Dispatchers.IO) {
+actual suspend fun AppPlatform.selectImageFromGallery(): String? = suspendCancellableCoroutine { continuation ->
     try {
-        val fileChooser = JFileChooser()
-        fileChooser.dialogTitle = "选择图片"
-        fileChooser.fileSelectionMode = JFileChooser.FILES_ONLY
-        fileChooser.isAcceptAllFileFilterUsed = false
+        // JFileChooser 必须在 AWT Event Dispatch Thread 上运行
+        javax.swing.SwingUtilities.invokeLater {
+            try {
+                val fileChooser = JFileChooser()
+                fileChooser.dialogTitle = "选择图片"
+                fileChooser.fileSelectionMode = JFileChooser.FILES_ONLY
+                fileChooser.isAcceptAllFileFilterUsed = false
 
-        // 设置文件过滤器，只显示图片文件
-        val filter = FileNameExtensionFilter(
-            "图片文件", "jpg", "jpeg", "png", "gif", "bmp"
-        )
-        fileChooser.addChoosableFileFilter(filter)
+                val filter = FileNameExtensionFilter(
+                    "图片文件", "jpg", "jpeg", "png", "gif", "bmp"
+                )
+                fileChooser.addChoosableFileFilter(filter)
 
-        // 显示文件选择对话框
-        val result = fileChooser.showOpenDialog(null)
+                val result = fileChooser.showOpenDialog(null)
 
-        // 如果用户选择了文件，返回文件路径
-        if (result == JFileChooser.APPROVE_OPTION) {
-            return@withContext fileChooser.selectedFile.absolutePath
+                if (result == JFileChooser.APPROVE_OPTION) {
+                    continuation.resume(fileChooser.selectedFile.absolutePath)
+                } else {
+                    continuation.resume(null)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                continuation.resume(null)
+            }
         }
-
-        // 用户取消选择，返回null
-        null
     } catch (e: Exception) {
         e.printStackTrace()
-        null
+        continuation.resume(null)
     }
 }
 

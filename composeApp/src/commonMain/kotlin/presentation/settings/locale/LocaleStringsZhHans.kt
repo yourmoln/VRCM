@@ -181,4 +181,31 @@ internal val LocaleStringsZhHans = LocaleStrings(
     groupLanguages = "语言",
     groupLinks = "链接",
     groupMembersTitle = "成员",
+
+    // UserProfile Sections
+    userTabBio = "简介",
+    userTabGroups = "群组",
+    userTabNote = "备注",
+    userTabNoteHint = "点击添加备注...",
+    userTabMutualGroups = "共同群组",
+
+    // Boop & Invite
+    profileBoop = "戳一下",
+    profileInviteToMyInstance = "邀请来我的实例",
+
+    // Recent Worlds
+    recentWorldsTitle = "最近访问的世界",
+    recentWorldsEmpty = "暂无最近访问的世界",
+
+    // Avatar
+    avatars = "模型",
+    friendListPagerAllAvatars = "全部模型",
+    avatarDescription = "描述",
+    avatarAuthor = "作者",
+    avatarVersion = "版本",
+    avatarCreatedAt = "创建时间",
+    avatarUpdatedAt = "更新时间",
+    avatarPlatforms = "平台",
+    avatarPerformance = "性能",
+    avatarTags = "标签",
 )

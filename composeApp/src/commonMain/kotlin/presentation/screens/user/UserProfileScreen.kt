@@ -1,11 +1,9 @@
 package io.github.vrcmteam.vrcm.presentation.screens.user
 
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.foundation.*
-import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -25,6 +23,8 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.getAppPlatform
 import io.github.vrcmteam.vrcm.network.api.attributes.FavoriteType
 import io.github.vrcmteam.vrcm.network.api.attributes.FriendRequestStatus.*
+import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
+import cafe.adriel.voyager.navigator.Navigator
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.extensions.currentNavigator
 import io.github.vrcmteam.vrcm.presentation.extensions.enableIf
@@ -35,8 +35,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
-import io.github.vrcmteam.vrcm.presentation.screens.user.FriendNetworkScreen
-import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreen
+import io.github.vrcmteam.vrcm.presentation.screens.world.RecentWorldsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.components.FavoriteGroupBottomSheet
 import io.github.vrcmteam.vrcm.presentation.screens.world.data.WorldProfileVo
@@ -44,7 +43,6 @@ import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.LanguageIcons
 import io.github.vrcmteam.vrcm.presentation.supports.WebIcons
-import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import kotlinx.coroutines.launch
 import org.koin.core.parameter.parametersOf
 
@@ -71,6 +69,8 @@ data class UserProfileScreen(
 
         val currentUser = userProfileScreenModel.userState
         val userGroups = userProfileScreenModel.userGroups
+        val mutualGroups = userProfileScreenModel.mutualGroups
+        val userNote = userProfileScreenModel.userNote
         var bottomSheetIsVisible by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
         var openAlertDialog by remember { mutableStateOf(false) }
@@ -88,6 +88,9 @@ data class UserProfileScreen(
                     currentUser = currentUser,
                     friendLocation = userProfileScreenModel.friendLocation,
                     userGroups = userGroups,
+                    mutualGroups = mutualGroups,
+                    userNote = userNote,
+                    onSaveNote = { note -> userProfileScreenModel.saveUserNote(currentUser.id, note) },
                     ratio = ratio
                 )
             }
@@ -149,6 +152,16 @@ private fun ColumnScope.SheetItems(
 
     }
 
+    // 最近世界 - 仅自己可见
+    if (currentUser.isSelf) {
+        SheetButtonItem(text = localeStrings.recentWorldsTitle, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                navigator.push(RecentWorldsScreen)
+            }
+        })
+    }
+
     // 管理好友收藏分组，仅当不是自己且是好友时显示
     if (!currentUser.isSelf) {
         SheetButtonItem(text = localeStrings.selectFavoriteGroup, onClick = {
@@ -172,6 +185,26 @@ private fun ColumnScope.SheetItems(
             }
         }
     )
+
+    // Boop 按钮 - 仅好友可见
+    if (!currentUser.isSelf && currentUser.isFriend) {
+        SheetButtonItem(text = localeStrings.profileBoop, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                userProfileScreenModel.boop(currentUser.id)
+            }
+        })
+    }
+
+    // 邀请来我的实例 - 仅好友可见
+    if (!currentUser.isSelf && currentUser.isFriend) {
+        SheetButtonItem(text = localeStrings.profileInviteToMyInstance, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                userProfileScreenModel.inviteToMyInstance(currentUser.id)
+            }
+        })
+    }
 
     FriendRequestSheetItem(
         currentUser,
@@ -310,18 +343,18 @@ private fun ProfileContent(
     currentUser: UserProfileVo?,
     friendLocation: FriendLocation?,
     userGroups: List<LimitedUserGroup>,
+    mutualGroups: List<LimitedUserGroup>,
+    userNote: String,
+    onSaveNote: (String) -> Unit,
     ratio: Float,
 ) {
     if (currentUser == null) return
     val sharedSuffixKey = LocalSharedSuffixKey.current
     val inverseRatio = 1 - ratio
-    val scrollState = rememberScrollState()
     val navigator = currentNavigator
     // 当上方图片完整显示时子内容自动滚动到顶部
     if (inverseRatio == 0f) {
-        LaunchedEffect(Unit) {
-            scrollState.animateScrollTo(0)
-        }
+        LaunchedEffect(Unit) {}
     }
     // TrustRank + UserName + VRC+
     UserInfoRow(user = currentUser, canCopy = true)
@@ -370,102 +403,58 @@ private fun ProfileContent(
         }
     }
 
-    UserGroupsSection(
-        groups = userGroups,
-        onGroupClick = { group ->
-            navigator push GroupProfileScreen(
-                groupProfileVo = GroupProfileVo(
-                    groupId = group.groupId,
-                    name = group.name,
-                    shortCode = group.shortCode,
-                    iconUrl = group.iconUrl,
-                    bannerUrl = group.bannerUrl,
-                    memberCount = group.memberCount,
-                ),
-                sharedSuffixKey = sharedSuffixKey
+    // Bio + Groups 可滚动区域
+    val scrollState = rememberScrollState()
+    if (inverseRatio == 0f) {
+        LaunchedEffect(Unit) {
+            scrollState.animateScrollTo(0)
+        }
+    }
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(scrollState),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // User Note (not for self)
+        if (!currentUser.isSelf) {
+            UserNoteSection(
+                note = userNote,
+                onSaveNote = onSaveNote,
             )
         }
-    )
 
-    Box(
-        modifier = Modifier
-            .padding(top = 12.dp)
-    ) {
-        BottomCardTab(scrollState, currentUser)
-    }
-}
-
-@OptIn(ExperimentalSharedTransitionApi::class)
-@Composable
-private fun UserGroupsSection(
-    groups: List<LimitedUserGroup>,
-    onGroupClick: (LimitedUserGroup) -> Unit,
-) {
-    if (groups.isEmpty()) return
-    Column(
-        modifier = Modifier.fillMaxWidth(),
-        verticalArrangement = Arrangement.spacedBy(8.dp)
-    ) {
-        Text(
-            text = strings.groups,
-            style = MaterialTheme.typography.titleMedium,
-            color = MaterialTheme.colorScheme.primary
-        )
-        LazyRow(
-            horizontalArrangement = Arrangement.spacedBy(10.dp)
-        ) {
-            items(groups, key = { it.groupId }) { group ->
-                Surface(
-                    modifier = Modifier
-                        .width(180.dp)
-                        .height(88.dp)
-                        .clip(MaterialTheme.shapes.large)
-                        .clickable { onGroupClick(group) },
-                    color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    contentColor = MaterialTheme.colorScheme.primary
-                ) {
-                    Column(
-                        modifier = Modifier.padding(10.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            GroupIcon(
-                                iconUrl = group.iconUrl,
-                                size = 36.dp,
-                                modifier = Modifier.sharedBoundsBy("${group.groupId}GroupIcon")
-                            )
-                            Column(
-                                verticalArrangement = Arrangement.spacedBy(2.dp)
-                            ) {
-                                Text(
-                                    modifier = Modifier.sharedBoundsBy("${group.groupId}GroupName"),
-                                    text = group.name,
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                if (group.shortCode.isNotBlank()) {
-                                    Text(
-                                        text = "#${group.shortCode}",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        maxLines = 1
-                                    )
-                                }
-                            }
-                        }
-                        Text(
-                            text = "${group.memberCount} ${strings.groupMembers}",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1
-                        )
-                    }
+        // Bio
+        if (currentUser.bio.isNotBlank()) {
+            SectionCard(
+                title = strings.userTabBio,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                SelectionContainer {
+                    Text(
+                        text = currentUser.bio,
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
+        }
+
+        // Mutual Groups
+        if (mutualGroups.isNotEmpty() && !currentUser.isSelf) {
+            GroupListSection(
+                title = strings.userTabMutualGroups,
+                groups = mutualGroups,
+                navigator = navigator,
+            )
+        }
+
+        // Groups
+        if (userGroups.isNotEmpty()) {
+            GroupListSection(
+                title = strings.userTabGroups,
+                groups = userGroups,
+                navigator = navigator,
+            )
         }
     }
 }
@@ -484,77 +473,28 @@ fun UserPronouns(pronouns: String) {
 }
 
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
-private fun BottomCardTab(
-    scrollState: ScrollState,
-    userProfileVO: UserProfileVo,
+private fun SectionCard(
+    title: String,
+    modifier: Modifier = Modifier,
+    content: @Composable ColumnScope.() -> Unit
 ) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+    Card(
+        modifier = modifier,
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest
+        )
     ) {
-        var state by remember { mutableStateOf(0) }
-        val titles = listOf("Bio", "Worlds", "Groups")
-        // TODO
-//        PrimaryTabRow(
-//            modifier = Modifier
-//                .padding(horizontal = 12.dp)
-//                .clip(MaterialTheme.shapes.extraLarge),
-//            selectedTabIndex = state
-//        ) {
-//            titles.forEachIndexed { index, title ->
-//                Tab(
-//                    selected = state == index,
-//                    enabled = index == 0,
-//                    onClick = { state = index },
-//                    text = { Text(text = title, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-//                )
-//            }
-//        }
-        AnimatedContent(targetState = state) {
-            when (it) {
-                0 -> {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        // 加个内边距
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp)
-                                .verticalScroll(scrollState),
-                        ) {
-                            SelectionContainer {
-                                Text(
-                                    text = userProfileVO.bio
-                                )
-                            }
-                        }
-                    }
-                }
-
-                else -> {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surfaceContainerLowest,
-                        contentColor = MaterialTheme.colorScheme.primary,
-                        shape = MaterialTheme.shapes.extraLarge
-                    ) {
-                        // 加个内边距
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(12.dp)
-                                .verticalScroll(scrollState),
-                        ) {
-                            Text(
-                                text = titles[it]
-                            )
-                        }
-                    }
-                }
-            }
+        Column(
+            modifier = Modifier.padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            content()
         }
     }
 }
@@ -640,6 +580,124 @@ internal fun LanguagesRow(
                             .width(width),
                         contentScale = ContentScale.FillWidth
                     )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UserNoteSection(
+    note: String,
+    onSaveNote: (String) -> Unit,
+) {
+    var isEditing by remember { mutableStateOf(false) }
+    var editText by remember(note) { mutableStateOf(note) }
+
+    SectionCard(
+        title = strings.userTabNote,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        if (isEditing) {
+            OutlinedTextField(
+                value = editText,
+                onValueChange = { editText = it },
+                modifier = Modifier.fillMaxWidth(),
+                textStyle = MaterialTheme.typography.bodyMedium,
+                minLines = 2,
+                maxLines = 5,
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                TextButton(onClick = {
+                    editText = note
+                    isEditing = false
+                }) {
+                    Text(strings.cancel)
+                }
+                TextButton(onClick = {
+                    onSaveNote(editText)
+                    isEditing = false
+                }) {
+                    Text(strings.confirm)
+                }
+            }
+        } else {
+            Text(
+                text = note.ifEmpty { strings.userTabNoteHint },
+                style = MaterialTheme.typography.bodyMedium,
+                color = if (note.isEmpty()) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                modifier = Modifier.fillMaxWidth().clickable { isEditing = true },
+            )
+        }
+    }
+}
+
+@Composable
+private fun GroupListSection(
+    title: String,
+    groups: List<LimitedUserGroup>,
+    navigator: Navigator,
+) {
+    SectionCard(
+        title = title,
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            groups.forEach { group ->
+                Surface(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(MaterialTheme.shapes.large)
+                        .clickable {
+                            navigator push GroupProfileScreen(
+                                groupProfileVo = GroupProfileVo(
+                                    groupId = group.groupId,
+                                    name = group.name,
+                                    shortCode = group.shortCode,
+                                    iconUrl = group.iconUrl,
+                                    bannerUrl = group.bannerUrl,
+                                    memberCount = group.memberCount,
+                                ),
+                            )
+                        },
+                    color = MaterialTheme.colorScheme.surfaceContainerLow,
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        GroupIcon(
+                            iconUrl = group.iconUrl,
+                            size = 48.dp,
+                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = group.name,
+                                style = MaterialTheme.typography.bodyMedium,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            if (group.shortCode.isNotBlank()) {
+                                Text(
+                                    text = "#${group.shortCode}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    maxLines = 1
+                                )
+                            }
+                            Text(
+                                text = "${group.memberCount} ${strings.groupMembers}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1
+                            )
+                        }
+                    }
                 }
             }
         }

@@ -181,4 +181,31 @@ internal val LocaleStringsZhHant = LocaleStrings(
     groupLanguages = "語言",
     groupLinks = "連結",
     groupMembersTitle = "成員",
+
+    // UserProfile Sections
+    userTabBio = "簡介",
+    userTabGroups = "群組",
+    userTabNote = "備註",
+    userTabNoteHint = "點擊添加備註...",
+    userTabMutualGroups = "共同群組",
+
+    // Boop & Invite
+    profileBoop = "戳一下",
+    profileInviteToMyInstance = "邀請來我的實例",
+
+    // Recent Worlds
+    recentWorldsTitle = "最近訪問的世界",
+    recentWorldsEmpty = "暫無最近訪問的世界",
+
+    // Avatar
+    avatars = "模型",
+    friendListPagerAllAvatars = "全部模型",
+    avatarDescription = "描述",
+    avatarAuthor = "作者",
+    avatarVersion = "版本",
+    avatarCreatedAt = "創建時間",
+    avatarUpdatedAt = "更新時間",
+    avatarPlatforms = "平台",
+    avatarPerformance = "性能",
+    avatarTags = "標籤",
 )
