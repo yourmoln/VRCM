@@ -25,22 +25,37 @@ class AvatarProfileScreenModel(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
+    private var latestRequestToken = 0L
+
     fun refreshAvatarData(avatarProfileVo: AvatarProfileVo) {
+        val requestToken = ++latestRequestToken
         _avatarProfileState.value = avatarProfileVo
         val avatarId = avatarProfileVo.avatarId
-        if (_isLoading.value || avatarId.isBlank()) return
+        if (avatarId.isBlank()) {
+            _isLoading.value = false
+            return
+        }
         _isLoading.value = true
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
                 avatarsApi.getAvatarById(avatarId)
             }.onSuccess { avatarData ->
-                _avatarProfileState.value = AvatarProfileVo(avatarData)
+                if (isLatestAvatarRequest(requestToken, latestRequestToken)) {
+                    _avatarProfileState.value = AvatarProfileVo(avatarData)
+                }
             }.onFailure {
-                SharedFlowCentre.toastText.emit(
-                    ToastText.Error(it.message ?: "Failed to load avatar data")
-                )
+                if (isLatestAvatarRequest(requestToken, latestRequestToken)) {
+                    SharedFlowCentre.toastText.emit(
+                        ToastText.Error(it.message ?: "Failed to load avatar data")
+                    )
+                }
             }
-            _isLoading.value = false
+            if (isLatestAvatarRequest(requestToken, latestRequestToken)) {
+                _isLoading.value = false
+            }
         }
     }
 }
+
+internal fun isLatestAvatarRequest(requestToken: Long, latestRequestToken: Long): Boolean =
+    requestToken == latestRequestToken

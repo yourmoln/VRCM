@@ -18,10 +18,6 @@ import io.github.vrcmteam.vrcm.network.websocket.WebSocketApi
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.client.plugins.cookies.*
-import io.ktor.client.plugins.logging.LogLevel
-import io.ktor.client.plugins.logging.Logger
-import io.ktor.client.plugins.logging.Logging
-import io.ktor.client.plugins.logging.SIMPLE
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.serialization.json.Json
 import org.koin.core.definition.Definition
@@ -43,18 +39,17 @@ internal val networkModule = module(true) {
     singleOf(::GitHubApi)
     singleOf(::GroupsApi)
     singleOf(::PrintsApi)
-    single <HttpClient> { apiClientDefinition(it) }
-    single { Json {
-        ignoreUnknownKeys = true
-        encodeDefaults = true
-        explicitNulls = false
-        coerceInputValues = true
-        prettyPrint = true
-        isLenient = true
-    } }
+    single<HttpClient> { apiClientDefinition(it) }
+    single { createNetworkJson() }
 }
 
-
+internal fun createNetworkJson() = Json {
+    ignoreUnknownKeys = true
+    encodeDefaults = true
+    explicitNulls = false
+    prettyPrint = true
+    isLenient = true
+}
 
 private val apiClientDefinition: Definition<HttpClient> = {
     HttpClient {
@@ -62,10 +57,6 @@ private val apiClientDefinition: Definition<HttpClient> = {
         // api的json序列化器
         install(ContentNegotiation) {
             json(get())
-        }
-        install(Logging) {
-            logger = Logger.SIMPLE
-            level = LogLevel.ALL
         }
         install(HttpCookies) {
             this.storage = get()

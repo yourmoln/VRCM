@@ -217,7 +217,7 @@ class UserProfileScreenModel(
         authService.reTryAuthCatching {
             usersApi.getUserGroups(userId)
         }.onSuccess { groups ->
-            _userGroups.value = groups
+            _userGroups.value = visibleUserGroups(groups, userState.isSelf)
             _mutualGroups.value = groups.filter { it.mutualGroup }
         }.onFailure {
             handleError(it)
@@ -347,28 +347,32 @@ class UserProfileScreenModel(
         }
     }
 
-    fun boop(userId: String) {
+    fun boop(userId: String, successMessage: String) {
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
                 usersApi.boop(userId)
             }.onSuccess {
-                SharedFlowCentre.toastText.emit(ToastText.Success("Boop!"))
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
             }.onFailure {
                 handleError(it)
             }
         }
     }
 
-    fun inviteToMyInstance(userId: String) {
+    fun inviteToMyInstance(
+        userId: String,
+        successMessage: String,
+        notInInstanceMessage: String,
+    ) {
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
                 val instanceLocation = authService.currentUser().presence.instance
                 require(instanceLocation.isNotBlank() && instanceLocation != "offline") {
-                    "You are not in an instance"
+                    notInInstanceMessage
                 }
                 inviteApi.inviteUser(userId, instanceLocation)
             }.onSuccess {
-                SharedFlowCentre.toastText.emit(ToastText.Success("Invite sent"))
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
             }.onFailure {
                 handleError(it)
             }
@@ -457,6 +461,11 @@ class UserProfileScreenModel(
         }
     }
 }
+
+internal fun visibleUserGroups(
+    groups: List<LimitedUserGroup>,
+    isSelf: Boolean,
+): List<LimitedUserGroup> = if (isSelf) groups else groups.filterNot { it.mutualGroup }
 
 private fun UserProfileVo.toFriendData() =
     FriendData(

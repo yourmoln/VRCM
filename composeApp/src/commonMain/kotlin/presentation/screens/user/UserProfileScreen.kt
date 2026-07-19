@@ -243,13 +243,20 @@ private fun ColumnScope.SheetItems(
             SheetButtonItem(text = localeStrings.profileBoop, onClick = {
                 scope.launch { hideSheet() }.invokeOnCompletion {
                     onHideCompletion()
-                    userProfileScreenModel.boop(currentUser.id)
+                    userProfileScreenModel.boop(
+                        userId = currentUser.id,
+                        successMessage = localeStrings.profileBoopSuccess,
+                    )
                 }
             })
             SheetButtonItem(text = localeStrings.profileInviteToMyInstance, onClick = {
                 scope.launch { hideSheet() }.invokeOnCompletion {
                     onHideCompletion()
-                    userProfileScreenModel.inviteToMyInstance(currentUser.id)
+                    userProfileScreenModel.inviteToMyInstance(
+                        userId = currentUser.id,
+                        successMessage = localeStrings.profileInviteSent,
+                        notInInstanceMessage = localeStrings.profileInviteNotInInstance,
+                    )
                 }
             })
         }

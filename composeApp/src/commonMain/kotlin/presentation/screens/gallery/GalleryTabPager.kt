@@ -26,12 +26,15 @@ import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.koin.koinScreenModel
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
-import io.github.vrcmteam.vrcm.core.extensions.selectImageFromGallery
-import io.github.vrcmteam.vrcm.getAppPlatform
+import io.github.vinceglb.filekit.name
+import io.github.vinceglb.filekit.readBytes
+import io.github.vinceglb.filekit.dialogs.FileKitType
+import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
+import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
-import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
+import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
@@ -58,6 +61,32 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
 
         val isPrint = tagType == FileTagType.Print
+        val coroutineScope = rememberCoroutineScope()
+        val printMessages = PrintActionMessages(
+            uploading = strings.galleryPrintUploading,
+            uploaded = strings.galleryPrintUploaded,
+            uploadFailed = strings.galleryPrintUploadFailed,
+            updating = strings.galleryPrintUpdating,
+            updated = strings.galleryPrintUpdated,
+            updateFailed = strings.galleryPrintUpdateFailed,
+            deleted = strings.galleryPrintDeleted,
+            deleteFailed = strings.galleryPrintDeleteFailed,
+        )
+        val imagePicker = rememberFilePickerLauncher(type = FileKitType.Image) { image ->
+            if (image != null) {
+                coroutineScope.launch {
+                    runCatching { image.readBytes() }
+                        .onSuccess { galleryScreenModel.uploadPrint(it, image.name, printMessages) }
+                        .onFailure {
+                            SharedFlowCentre.toastText.emit(
+                                ToastText.Error(
+                                    printMessages.uploadFailed.replace("%s", it.message.orEmpty())
+                                )
+                            )
+                        }
+                }
+            }
+        }
 
         Box(modifier = Modifier.fillMaxSize()) {
             RefreshBox(
@@ -72,14 +101,8 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
             }
 
             if (isPrint) {
-                val coroutineScope = rememberCoroutineScope()
-                val platform = getAppPlatform()
                 FloatingActionButton(
-                    onClick = {
-                        coroutineScope.launch {
-                            platform.selectImageFromGallery()?.let(galleryScreenModel::uploadPrint)
-                        }
-                    },
+                    onClick = imagePicker::launch,
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),

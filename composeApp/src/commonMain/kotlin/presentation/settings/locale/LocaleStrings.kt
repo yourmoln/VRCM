@@ -157,6 +157,14 @@ data class LocaleStrings(
     val galleryTabUploading: String = "Uploading image...",
     val galleryTabUploadImage: String = "Upload Image",
     val galleryTabLoadFailed: String = "Loading Failed",
+    val galleryPrintUploading: String = "Uploading print...",
+    val galleryPrintUploaded: String = "Print uploaded",
+    val galleryPrintUploadFailed: String = "Print upload failed: %s",
+    val galleryPrintUpdating: String = "Updating print...",
+    val galleryPrintUpdated: String = "Print updated",
+    val galleryPrintUpdateFailed: String = "Print update failed: %s",
+    val galleryPrintDeleted: String = "Print deleted",
+    val galleryPrintDeleteFailed: String = "Print deletion failed: %s",
 
     // GalleryScreen
     val galleryScreenTitle: String = "Gallery",
@@ -214,7 +222,10 @@ data class LocaleStrings(
     // Local profile actions
     val userMutualGroups: String = "Mutual Groups",
     val profileBoop: String = "Boop",
+    val profileBoopSuccess: String = "Boop sent",
     val profileInviteToMyInstance: String = "Invite to My Instance",
+    val profileInviteSent: String = "Invite sent",
+    val profileInviteNotInInstance: String = "You are not in an instance",
     val recentWorldsTitle: String = "Recent Worlds",
     val recentWorldsEmpty: String = "No recent worlds",
     val avatars: String = "Avatars",

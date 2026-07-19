@@ -454,15 +454,19 @@ class FriendListPagerModel(
     private suspend fun doRefreshAvatarList() {
         authService.reTryAuthCatching {
             // 分页获取全部收藏模型
-            val allAvatars = mutableListOf<AvatarData>()
+            val remoteAvatars = mutableListOf<AvatarData>()
             var offset = 0
             val pageSize = 50
             do {
                 val page = avatarsApi.getFavoritedAvatars(n = pageSize, offset = offset)
-                allAvatars.addAll(page)
+                remoteAvatars.addAll(page)
                 offset += pageSize
             } while (page.size >= pageSize)
-            allAvatars
+
+            val localAvatars = localFavoritedAvatarIds(avatarFavoriteGroupsFlow.value).mapNotNull { avatarId ->
+                authService.reTryAuthCatching { avatarsApi.getAvatarById(avatarId) }.getOrNull()
+            }
+            mergeFavoritedAvatars(remoteAvatars, localAvatars)
         }.onSuccess { avatars ->
             favoritedAvatarMap.clear()
             favoritedAvatarMap.putAll(avatars.associateBy { it.id })
@@ -556,3 +560,16 @@ private fun WorldData.toFavoritedWorldForLocal(localGroupName: String, wid: Stri
         previewYoutubeId = this.previewYoutubeId
     )
 }
+
+internal fun mergeFavoritedAvatars(
+    remoteAvatars: List<AvatarData>,
+    localAvatars: List<AvatarData>,
+): List<AvatarData> = (remoteAvatars + localAvatars).distinctBy { it.id }
+
+internal fun localFavoritedAvatarIds(
+    groups: Map<FavoriteGroupData, List<FavoriteData>>,
+): List<String> = groups.entries
+    .firstOrNull { (group, _) -> group.ownerId == "local" && group.type == Avatar.value }
+    ?.value
+    .orEmpty()
+    .map { it.favoriteId }

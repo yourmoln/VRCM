@@ -10,8 +10,8 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
-import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
 import io.github.vrcmteam.vrcm.network.api.prints.PrintsApi
+import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.extensions.onApiFailure
 import io.github.vrcmteam.vrcm.service.AuthService
@@ -19,6 +19,17 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import org.koin.core.logger.Logger
+
+data class PrintActionMessages(
+    val uploading: String,
+    val uploaded: String,
+    val uploadFailed: String,
+    val updating: String,
+    val updated: String,
+    val updateFailed: String,
+    val deleted: String,
+    val deleteFailed: String,
+)
 
 class GalleryScreenModel(
     private val authService: AuthService,
@@ -89,7 +100,7 @@ class GalleryScreenModel(
         _isRefreshingPrints.value = true
         screenModelScope.launch(Dispatchers.IO) {
             val userId = authService.currentUser().id
-            authService.reTryAuthCatching { fileApi.getPrints(userId, n = n, offset = offset) }
+            authService.reTryAuthCatching { printsApi.getUserPrints(userId, n = n, offset = offset) }
                 .onGalleryFailure()
                 .onSuccess { prints ->
                     _prints.value = prints.sortedByDescending { it.createdAt ?: it.timestamp }
@@ -165,52 +176,74 @@ class GalleryScreenModel(
         }
     }
 
-    fun uploadPrint(imagePath: String) {
+    fun uploadPrint(imageBytes: ByteArray, fileName: String, messages: PrintActionMessages) {
         screenModelScope.launch(Dispatchers.IO) {
             try {
-                SharedFlowCentre.toastText.emit(ToastText.Info("Uploading print..."))
-                val fileBytes = platform.readFileBytes(imagePath)
-                val fileName = imagePath.substringAfterLast('\\').substringAfterLast('/')
+                SharedFlowCentre.toastText.emit(ToastText.Info(messages.uploading))
 
                 authService.reTryAuthCatching {
-                    printsApi.uploadPrint(fileBytes, fileName)
-                }.onGalleryFailure().onSuccess {
-                    SharedFlowCentre.toastText.emit(ToastText.Success("Print uploaded"))
+                    printsApi.uploadPrint(imageBytes, fileName)
+                }.onFailure {
+                    logger.error("Upload print failed: ${it.message}")
+                    SharedFlowCentre.toastText.emit(
+                        ToastText.Error(messages.uploadFailed.replace("%s", it.message.orEmpty()))
+                    )
+                }.onSuccess {
+                    SharedFlowCentre.toastText.emit(ToastText.Success(messages.uploaded))
                     refreshPrints()
                 }
             } catch (e: Exception) {
-                SharedFlowCentre.toastText.emit(ToastText.Error("Upload failed: ${e.message}"))
+                SharedFlowCentre.toastText.emit(
+                    ToastText.Error(messages.uploadFailed.replace("%s", e.message.orEmpty()))
+                )
                 logger.error("Upload print exception: ${e.message}")
             }
         }
     }
 
-    fun editPrint(printId: String, imagePath: String, note: String? = null) {
+    fun editPrint(
+        printId: String,
+        imagePath: String,
+        messages: PrintActionMessages,
+        note: String? = null,
+    ) {
         screenModelScope.launch(Dispatchers.IO) {
             try {
-                SharedFlowCentre.toastText.emit(ToastText.Info("Updating print..."))
+                SharedFlowCentre.toastText.emit(ToastText.Info(messages.updating))
                 val fileBytes = platform.readFileBytes(imagePath)
                 val fileName = imagePath.substringAfterLast('\\').substringAfterLast('/')
 
                 authService.reTryAuthCatching {
                     printsApi.editPrint(printId, fileBytes, fileName, note)
-                }.onGalleryFailure().onSuccess {
-                    SharedFlowCentre.toastText.emit(ToastText.Success("Print updated"))
+                }.onFailure {
+                    logger.error("Edit print failed: ${it.message}")
+                    SharedFlowCentre.toastText.emit(
+                        ToastText.Error(messages.updateFailed.replace("%s", it.message.orEmpty()))
+                    )
+                }.onSuccess {
+                    SharedFlowCentre.toastText.emit(ToastText.Success(messages.updated))
                     refreshPrints()
                 }
             } catch (e: Exception) {
-                SharedFlowCentre.toastText.emit(ToastText.Error("Update failed: ${e.message}"))
+                SharedFlowCentre.toastText.emit(
+                    ToastText.Error(messages.updateFailed.replace("%s", e.message.orEmpty()))
+                )
                 logger.error("Edit print exception: ${e.message}")
             }
         }
     }
 
-    fun deletePrint(printId: String) {
+    fun deletePrint(printId: String, messages: PrintActionMessages) {
         screenModelScope.launch(Dispatchers.IO) {
             authService.reTryAuthCatching {
                 printsApi.deletePrint(printId)
-            }.onGalleryFailure().onSuccess {
-                SharedFlowCentre.toastText.emit(ToastText.Success("Print deleted"))
+            }.onFailure {
+                logger.error("Delete print failed: ${it.message}")
+                SharedFlowCentre.toastText.emit(
+                    ToastText.Error(messages.deleteFailed.replace("%s", it.message.orEmpty()))
+                )
+            }.onSuccess {
+                SharedFlowCentre.toastText.emit(ToastText.Success(messages.deleted))
                 refreshPrints()
             }
         }

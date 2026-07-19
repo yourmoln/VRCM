@@ -152,6 +152,14 @@ internal val LocaleStringsJa = LocaleStrings(
     galleryTabUploading = "イメージをアップロード中...",
     galleryTabUploadImage = "イメージをアップロード",
     galleryTabLoadFailed = "読み込みに失敗しました",
+    galleryPrintUploading = "プリントをアップロード中...",
+    galleryPrintUploaded = "プリントをアップロードしました",
+    galleryPrintUploadFailed = "プリントのアップロードに失敗しました: %s",
+    galleryPrintUpdating = "プリントを更新中...",
+    galleryPrintUpdated = "プリントを更新しました",
+    galleryPrintUpdateFailed = "プリントの更新に失敗しました: %s",
+    galleryPrintDeleted = "プリントを削除しました",
+    galleryPrintDeleteFailed = "プリントの削除に失敗しました: %s",
 
     // GalleryScreen
     galleryScreenTitle = "ギャラリー",
@@ -209,7 +217,10 @@ internal val LocaleStringsJa = LocaleStrings(
     // Local profile actions
     userMutualGroups = "共通グループ",
     profileBoop = "Boop",
+    profileBoopSuccess = "Boopを送信しました",
     profileInviteToMyInstance = "自分のインスタンスに招待",
+    profileInviteSent = "招待を送信しました",
+    profileInviteNotInInstance = "現在インスタンスに参加していません",
     recentWorldsTitle = "最近のワールド",
     recentWorldsEmpty = "最近のワールドはありません",
     avatars = "アバター",

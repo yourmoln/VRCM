@@ -7,14 +7,10 @@ import io.ktor.client.request.*
 import io.ktor.client.statement.*
 import io.ktor.utils.io.jvm.javaio.*
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import kotlin.coroutines.resume
 import java.io.File
 import java.nio.file.Files
 import javax.imageio.ImageIO
-import javax.swing.JFileChooser
-import javax.swing.filechooser.FileNameExtensionFilter
 
 /**
  * Desktop平台实现：保存图片到系统相册
@@ -45,42 +41,6 @@ actual suspend fun AppPlatform.saveImageToGallery(imageUrl: String, fileName: St
     } catch (e: Exception) {
         e.printStackTrace()
         false
-    }
-}
-
-/**
- * Desktop平台实现：从系统相册选择图片
- */
-actual suspend fun AppPlatform.selectImageFromGallery(): String? = suspendCancellableCoroutine { continuation ->
-    try {
-        // JFileChooser 必须在 AWT Event Dispatch Thread 上运行
-        javax.swing.SwingUtilities.invokeLater {
-            try {
-                val fileChooser = JFileChooser()
-                fileChooser.dialogTitle = "选择图片"
-                fileChooser.fileSelectionMode = JFileChooser.FILES_ONLY
-                fileChooser.isAcceptAllFileFilterUsed = false
-
-                val filter = FileNameExtensionFilter(
-                    "图片文件", "jpg", "jpeg", "png", "gif", "bmp"
-                )
-                fileChooser.addChoosableFileFilter(filter)
-
-                val result = fileChooser.showOpenDialog(null)
-
-                if (result == JFileChooser.APPROVE_OPTION) {
-                    continuation.resume(fileChooser.selectedFile.absolutePath)
-                } else {
-                    continuation.resume(null)
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                continuation.resume(null)
-            }
-        }
-    } catch (e: Exception) {
-        e.printStackTrace()
-        continuation.resume(null)
     }
 }
 

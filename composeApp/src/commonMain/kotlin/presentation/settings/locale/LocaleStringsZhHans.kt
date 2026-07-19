@@ -152,6 +152,14 @@ internal val LocaleStringsZhHans = LocaleStrings(
     galleryTabUploading = "正在上传图片...",
     galleryTabUploadImage = "上传图片",
     galleryTabLoadFailed = "加载失败",
+    galleryPrintUploading = "正在上传拍立得...",
+    galleryPrintUploaded = "拍立得上传成功",
+    galleryPrintUploadFailed = "拍立得上传失败: %s",
+    galleryPrintUpdating = "正在更新拍立得...",
+    galleryPrintUpdated = "拍立得更新成功",
+    galleryPrintUpdateFailed = "拍立得更新失败: %s",
+    galleryPrintDeleted = "拍立得已删除",
+    galleryPrintDeleteFailed = "拍立得删除失败: %s",
 
     // GalleryScreen
     galleryScreenTitle = "图库",
@@ -209,7 +217,10 @@ internal val LocaleStringsZhHans = LocaleStrings(
     // Local profile actions
     userMutualGroups = "共同群组",
     profileBoop = "戳一下",
+    profileBoopSuccess = "已戳一下",
     profileInviteToMyInstance = "邀请来我的实例",
+    profileInviteSent = "邀请已发送",
+    profileInviteNotInInstance = "你当前不在任何实例中",
     recentWorldsTitle = "最近访问的世界",
     recentWorldsEmpty = "暂无最近访问的世界",
     avatars = "模型",

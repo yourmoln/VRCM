@@ -1,7 +1,7 @@
 package io.github.vrcmteam.vrcm.network.api.prints
 
 import io.github.vrcmteam.vrcm.network.api.attributes.PRINTS_API_PREFIX
-import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
+import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
 import io.ktor.client.*
 import io.ktor.client.request.*
@@ -13,8 +13,15 @@ import kotlin.time.ExperimentalTime
 @OptIn(ExperimentalTime::class)
 class PrintsApi(private val client: HttpClient) {
 
-    suspend fun getUserPrints(userId: String): List<PrintData> =
-        client.get("$PRINTS_API_PREFIX/user/$userId").checkSuccess()
+    suspend fun getUserPrints(
+        userId: String,
+        n: Int = 100,
+        offset: Int = 0,
+    ): List<PrintData> =
+        client.get("$PRINTS_API_PREFIX/user/$userId") {
+            parameter("n", n.coerceIn(1, 100))
+            parameter("offset", offset.coerceAtLeast(0))
+        }.checkSuccess()
 
     suspend fun getPrint(printId: String): PrintData =
         client.get("$PRINTS_API_PREFIX/$printId").checkSuccess()

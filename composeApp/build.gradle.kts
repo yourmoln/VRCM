@@ -91,6 +91,8 @@ kotlin {
 
             implementation(libs.chrisbanes.haze)
 
+            implementation(libs.filekit.dialogs.compose)
+
 //            implementation(libs.kamel)
             implementation(libs.voyager.navigator)
             implementation(libs.voyager.screenModel)
@@ -100,6 +102,7 @@ kotlin {
 
         commonTest.dependencies {
             implementation(kotlin("test"))
+            implementation(libs.ktor.client.mock)
         }
     }
 }

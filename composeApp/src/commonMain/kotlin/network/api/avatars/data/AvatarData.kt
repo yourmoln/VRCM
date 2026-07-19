@@ -14,14 +14,22 @@ internal object AvatarTagsSerializer : JsonTransformingSerializer<List<String>>(
     ListSerializer(String.serializer())
 ) {
     override fun transformDeserialize(element: JsonElement): JsonElement =
-        if (element is JsonPrimitive && element.isString) JsonArray(emptyList()) else element
+        if (element is JsonPrimitive && element.isString && element.content.isEmpty()) {
+            JsonArray(emptyList())
+        } else {
+            element
+        }
 }
 
 internal object AvatarUnityPackagesSerializer : JsonTransformingSerializer<List<AvatarUnityPackage>>(
     ListSerializer(AvatarUnityPackage.serializer())
 ) {
     override fun transformDeserialize(element: JsonElement): JsonElement =
-        if (element is JsonPrimitive && element.isString) JsonArray(emptyList()) else element
+        if (element is JsonPrimitive && element.isString && element.content.isEmpty()) {
+            JsonArray(emptyList())
+        } else {
+            element
+        }
 }
 
 @Serializable

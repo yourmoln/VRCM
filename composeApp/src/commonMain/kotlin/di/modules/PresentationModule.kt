@@ -47,7 +47,7 @@ val presentationModule: Module = module {
     singleOf(::SearchListPagerModel)
     singleOf(::WorldProfileScreenModel)
     singleOf(::GroupProfileScreenModel)
-    singleOf(::AvatarProfileScreenModel)
+    factoryOf(::AvatarProfileScreenModel)
     factoryOf(::RecentWorldsScreenModel)
     single<ImageLoader> { imageLoaderDefinition(it) }
     configThemeColor()
