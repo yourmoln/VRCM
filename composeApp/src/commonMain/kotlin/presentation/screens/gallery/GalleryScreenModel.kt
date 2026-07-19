@@ -1,6 +1,7 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery
 
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.AppPlatform
@@ -9,6 +10,7 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
+import io.github.vrcmteam.vrcm.network.api.files.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.extensions.onApiFailure
 import io.github.vrcmteam.vrcm.service.AuthService
@@ -26,7 +28,8 @@ class GalleryScreenModel(
 
     // 使用Map存储不同标签类型的图片文件列表
     private val _filesByTag = mutableStateMapOf<FileTagType, List<FileData>>().apply {
-        FileTagType.entries.forEach { tagType ->
+        // 不包含 Print，Print 使用独立的 API
+        FileTagType.entries.filter { it != FileTagType.Print }.forEach { tagType ->
             this[tagType] = emptyList()
         }
     }
@@ -38,6 +41,10 @@ class GalleryScreenModel(
         }
     }
 
+    // 拍立得使用独立的 API (GET /prints/user/{userId})
+    private val _prints = mutableStateOf<List<PrintData>>(emptyList())
+    private val _isRefreshingPrints = mutableStateOf(false)
+
     fun init() {
         refreshAllFiles()
     }
@@ -47,7 +54,7 @@ class GalleryScreenModel(
         refreshFiles(FileTagType.Emoji)
         refreshFiles(FileTagType.Sticker)
         refreshFiles(FileTagType.Gallery)
-        refreshFiles(FileTagType.Print)
+        refreshPrints()
     }
 
     /**
@@ -72,6 +79,28 @@ class GalleryScreenModel(
                 }
         }
     }
+
+    /**
+     * 获取拍立得列表（使用独立 API: GET /prints/user/{userId}）
+     */
+    fun refreshPrints(n: Int = 100, offset: Int = 0) {
+        _isRefreshingPrints.value = true
+        screenModelScope.launch(Dispatchers.IO) {
+            val userId = authService.currentUser().id
+            authService.reTryAuthCatching { fileApi.getPrints(userId, n = n, offset = offset) }
+                .onGalleryFailure()
+                .onSuccess { prints ->
+                    _prints.value = prints.sortedByDescending { it.createdAt ?: it.timestamp }
+                }
+                .also {
+                    _isRefreshingPrints.value = false
+                }
+        }
+    }
+
+    val prints: List<PrintData> get() = _prints.value
+
+    val isRefreshingPrints: Boolean get() = _isRefreshingPrints.value
 
     /**
      * 根据标签类型获取对应的文件列表

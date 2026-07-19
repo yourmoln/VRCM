@@ -1,16 +1,18 @@
 package io.github.vrcmteam.vrcm.network.api.users
 
 import io.github.vrcmteam.vrcm.network.api.attributes.USERS_API_PREFIX
+import io.github.vrcmteam.vrcm.network.api.attributes.USER_NOTES_API_PREFIX
 import io.github.vrcmteam.vrcm.network.api.users.data.SearchUserData
 import io.github.vrcmteam.vrcm.network.api.users.data.LimitedUserGroup
 import io.github.vrcmteam.vrcm.network.api.users.data.MutualFriendData
 import io.github.vrcmteam.vrcm.network.api.users.data.UserData
 import io.github.vrcmteam.vrcm.network.extensions.checkSuccess
+import io.github.vrcmteam.vrcm.network.api.users.data.CurrentUpdateUserData
+import io.github.vrcmteam.vrcm.network.api.users.data.UpdateUserInfoData
 import io.ktor.client.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
-import network.api.users.data.CurrentUpdateUserData
-import network.api.users.data.UpdateUserInfoData
 
 class UsersApi(private val client: HttpClient) {
 
@@ -60,5 +62,11 @@ class UsersApi(private val client: HttpClient) {
             parameter("n", n)
             parameter("offset", offset)
         }.checkSuccess()
+
+    suspend fun saveUserNote(targetUserId: String, note: String): String =
+        client.post(USER_NOTES_API_PREFIX) {
+            setBody(mapOf("targetUserId" to targetUserId, "note" to note))
+            contentType(ContentType.Application.Json)
+        }.checkSuccess { bodyAsText() }
 
 }

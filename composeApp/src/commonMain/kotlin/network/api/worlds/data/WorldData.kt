@@ -33,6 +33,7 @@ data class WorldData(
     val udonProducts: List<String>,
     val unityPackages: List<UnityPackage>,
     @SerialName(value = "instances")
+    @Serializable(with = InstancesSerializer::class)
     val instances: List<List<String>>? = null,
     @SerialName("updated_at")
     val updatedAt: String?,

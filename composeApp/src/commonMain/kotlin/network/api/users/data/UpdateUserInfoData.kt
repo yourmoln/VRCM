@@ -1,4 +1,4 @@
-package network.api.users.data
+package io.github.vrcmteam.vrcm.network.api.users.data
 
 import io.github.vrcmteam.vrcm.network.api.attributes.AgeVerificationStatus
 import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
@@ -11,6 +11,7 @@ data class UpdateUserInfoData(
     val bioLinks: List<String>? = null,
     val status: UserStatus? = null,
     val statusDescription: String? = null,
+    val pronouns: String? = null,
     val userIcon: String? = null,
     val email: String? = null,
     val password: String? = null,

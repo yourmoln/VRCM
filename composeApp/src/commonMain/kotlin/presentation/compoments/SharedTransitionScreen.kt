@@ -2,8 +2,6 @@ package io.github.vrcmteam.vrcm.presentation.compoments
 
 import androidx.compose.animation.*
 import androidx.compose.animation.SharedTransitionScope.*
-import androidx.compose.animation.SharedTransitionScope.PlaceHolderSize.Companion.contentSize
-import androidx.compose.animation.SharedTransitionScope.ResizeMode.Companion.ScaleToBounds
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.ProvidableCompositionLocal
@@ -66,7 +64,6 @@ fun Modifier.sharedElementBy(
     sharedTransitionScope: SharedTransitionScope = LocalSharedTransitionScreenScope.current,
     animatedVisibilityScope: AnimatedVisibilityScope = LocalAnimatedVisibilityScope.current,
     boundsTransform: BoundsTransform = DefaultBoundsTransform,
-    placeHolderSize: PlaceHolderSize = contentSize,
     renderInOverlayDuringTransition: Boolean = true,
     zIndexInOverlay: Float = 0f,
     clipInOverlayDuringTransition: OverlayClip = ParentClip,
@@ -77,7 +74,6 @@ fun Modifier.sharedElementBy(
             sharedContentState = rememberSharedContentState(if (!useSuffixKey || suffixKey.isBlank())key else "$key:$suffixKey"),
             animatedVisibilityScope = animatedVisibilityScope,
             boundsTransform = boundsTransform,
-            placeHolderSize = placeHolderSize,
             renderInOverlayDuringTransition = renderInOverlayDuringTransition,
             zIndexInOverlay = zIndexInOverlay,
             clipInOverlayDuringTransition = clipInOverlayDuringTransition
@@ -92,9 +88,8 @@ fun Modifier.sharedBoundsBy(
     useSuffixKey: Boolean = true,
     sharedTransitionScope: SharedTransitionScope = LocalSharedTransitionScreenScope.current,
     animatedVisibilityScope: AnimatedVisibilityScope = LocalAnimatedVisibilityScope.current,
-    resizeMode: ResizeMode = ScaleToBounds(ContentScale.FillWidth, Center),
+    resizeMode: ResizeMode = ResizeMode.RemeasureToBounds,
     boundsTransform: BoundsTransform = DefaultBoundsTransform,
-    placeHolderSize: PlaceHolderSize = contentSize,
     renderInOverlayDuringTransition: Boolean = true,
     zIndexInOverlay: Float = 0f,
     clipInOverlayDuringTransition: OverlayClip = ParentClip,
@@ -106,7 +101,6 @@ fun Modifier.sharedBoundsBy(
             animatedVisibilityScope = animatedVisibilityScope,
             resizeMode = resizeMode,
             boundsTransform = boundsTransform,
-            placeHolderSize = placeHolderSize,
             renderInOverlayDuringTransition = renderInOverlayDuringTransition,
             zIndexInOverlay = zIndexInOverlay,
             clipInOverlayDuringTransition = clipInOverlayDuringTransition

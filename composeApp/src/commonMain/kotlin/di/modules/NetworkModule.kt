@@ -1,6 +1,7 @@
 package io.github.vrcmteam.vrcm.di.modules
 
 import io.github.vrcmteam.vrcm.network.api.auth.AuthApi
+import io.github.vrcmteam.vrcm.network.api.avatars.AvatarsApi
 import io.github.vrcmteam.vrcm.network.api.favorite.FavoriteApi
 import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.friends.FriendsApi
@@ -24,6 +25,7 @@ import org.koin.dsl.module
 
 internal val networkModule = module(true) {
     singleOf(::AuthApi)
+    singleOf(::AvatarsApi)
     singleOf(::FileApi)
     singleOf(::FriendsApi)
     singleOf(::InstancesApi)

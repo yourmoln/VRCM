@@ -52,6 +52,22 @@ data class LocaleStrings(
     val profileViewGallery: String = "View Gallery",
     val profileViewMutualFriends: String = "View Mutual Friends",
     val profileViewFriendNetwork: String = "View Friend Network",
+    val profileEditProfile: String = "Edit Profile",
+    val editProfileTitle: String = "Edit Profile",
+    val editProfileStatus: String = "Social Status",
+    val editProfileStatusDescription: String = "Status description",
+    val editProfileStatusType: String = "Status type",
+    val editProfilePronouns: String = "Pronouns",
+    val editProfileBio: String = "Bio",
+    val editProfileLanguage: String = "Language",
+    val editProfileAddLanguage: String = "Add Language",
+    val editProfileLanguageHint: String = "Max 3 languages. Tap to remove.",
+    val editProfileSave: String = "Save",
+    val editProfileStatusOnline: String = "Online",
+    val editProfileStatusJoinMe: String = "Join Me",
+    val editProfileStatusAskMe: String = "Ask Me",
+    val editProfileStatusBusy: String = "Do Not Disturb",
+    val editProfileUpdateSuccess: String = "Profile updated",
     val mutualFriendsTitle: String = "Mutual Friends",
     val mutualFriendsEmpty: String = "No mutual friends with %s",
     val mutualFriendsCount: String = "Mutual Friends: %total%",
@@ -91,7 +107,7 @@ data class LocaleStrings(
     val instanceCreateSuccessButInviteFailed: String = "Instance created successfully but invite failed",
     val instanceCreateFailed: String = "Failed to create instance",
 
-    // 世界搜索相关
+    // World Search
     val worldSearchAdvancedOptions: String = "Advanced Search Options",
     val worldSearchFeaturedOnly: String = "Featured Worlds Only",
     val worldSearchSortBy: String = "Sort By",
@@ -101,7 +117,7 @@ data class LocaleStrings(
     val worldSearchResultCount: String = "Results Count",
     val worldSearchResultsFormat: String = "%d results",
 
-    // 排序选项
+    // Sort Options
     val worldSearchSortPopularity: String = "Popularity",
     val worldSearchSortHeat: String = "Heat",
     val worldSearchSortTrust: String = "Trust",
@@ -161,6 +177,10 @@ data class LocaleStrings(
     val groupClosed: String = "Closed",
     val groupRequestToJoin: String = "Request to Join",
     val groupTabDetails: String = "Details",
+    val groupTabPosts: String = "Posts",
+    val groupNoPosts: String = "No posts",
+    val loading: String = "Loading...",
+    val groupInstances: String = "Group Instances",
     val groupTabMembers: String = "Members",
     val groupTabGallery: String = "Gallery",
     val groupOwner: String = "Owner",
@@ -186,6 +206,26 @@ data class LocaleStrings(
     val groupLanguages: String = "Languages",
     val groupLinks: String = "Links",
     val groupMembersTitle: String = "Members",
+
+    // User Note
+    val userNoteEditTitle: String = "Edit Note",
+    val userNoteSaved: String = "Note saved",
+
+    // User Created Worlds & Avatars
+    val userCreatedWorlds: String = "Created Worlds",
+    val userCreatedAvatars: String = "Created Avatars",
+    val userCreatedWorldsCount: String = "Worlds: %d",
+    val userCreatedAvatarsCount: String = "Avatars: %d",
+    val userCreatedLoading: String = "Loading...",
+    val userCreatedEmpty: String = "No items",
+    val userFavoritedWorlds: String = "Favorited Worlds",
+
+    // Avatar Profile
+    val avatarProfileVersion: String = "Version",
+    val avatarProfileStatus: String = "Status",
+    val avatarProfileCreated: String = "Created",
+    val avatarProfileUpdated: String = "Updated",
+    val avatarProfilePlatforms: String = "Platforms",
 )
 
 val strings: LocaleStrings
