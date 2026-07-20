@@ -37,10 +37,15 @@ kotlin {
 
         androidMain.dependencies {
             implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.exifinterface)
 
             implementation(libs.koin.androidx.compose)
 
             implementation(libs.ktor.client.okhttp)
+        }
+
+        androidUnitTest.dependencies {
+            implementation(libs.robolectric)
         }
 
         iosMain.dependencies {
@@ -66,6 +71,7 @@ kotlin {
             implementation(compose.ui)
 //            implementation(compose.material)
             implementation(compose.material3)
+            implementation(compose.materialIconsExtended)
 //            implementation(compose.materialIconsExtended)
             implementation(compose.components.resources)
 //            implementation(compose.components.uiToolingPreview)
