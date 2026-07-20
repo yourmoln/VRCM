@@ -34,8 +34,6 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
 import io.github.vinceglb.filekit.name
-import io.github.vinceglb.filekit.readBytes
-import io.github.vinceglb.filekit.size
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
@@ -51,9 +49,11 @@ import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageLim
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.localizedMessage
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.readBoundedBytes
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.Pager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
@@ -98,27 +98,28 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 coroutineScope.launch {
                     isPreparingPrint = true
                     try {
-                        val fileSize = runCatching { image.size() }.getOrNull()
-                        if (fileSize != null && fileSize > PrintImageLimits.MAX_FILE_BYTES) {
-                            SharedFlowCentre.toastText.emit(
-                                ToastText.Error(locale.printEditorFileTooLarge)
-                            )
-                            return@launch
-                        }
                         val source = runCatching {
-                            SelectedImage(image.name, image.readBytes())
+                            SelectedImage(
+                                fileName = image.name,
+                                bytes = image.readBoundedBytes(PrintImageLimits.MAX_FILE_BYTES),
+                            )
                         }.getOrElse {
-                            SharedFlowCentre.toastText.emit(
-                                ToastText.Error(
-                                    locale.printEditorReadFailed.replace(
-                                        "%s",
-                                        it.message.orEmpty().ifBlank { locale.unknown },
-                                    )
+                            if (it is CancellationException) throw it
+                            val message = if (it is PrintImageFailure.FileTooLarge) {
+                                locale.printEditorFileTooLarge
+                            } else {
+                                locale.printEditorReadFailed.replace(
+                                    "%s",
+                                    it.message.orEmpty().ifBlank { locale.unknown },
                                 )
+                            }
+                            SharedFlowCentre.toastText.emit(
+                                ToastText.Error(message)
                             )
                             return@launch
                         }
                         val prepared = printImageProcessor.prepare(source).getOrElse { failure ->
+                            if (failure is CancellationException) throw failure
                             val message = (failure as? PrintImageFailure)
                                 ?.localizedMessage(locale)
                                 ?: locale.printEditorDecodeFailed

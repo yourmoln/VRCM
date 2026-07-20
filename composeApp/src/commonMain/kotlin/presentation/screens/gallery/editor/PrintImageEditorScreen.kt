@@ -70,6 +70,7 @@ import cafe.adriel.voyager.navigator.currentOrThrow
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.presentation.compoments.ATooltipBox
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
+import io.github.vrcmteam.vrcm.presentation.navigation.BlockSlideBackNavigation
 import io.github.vrcmteam.vrcm.presentation.settings.locale.LocaleStrings
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
@@ -108,6 +109,7 @@ class PrintImageEditorScreen(
         val snackbarHostState = remember { SnackbarHostState() }
 
         BlockBackNavigation(enabled = state.isBusy)
+        BlockSlideBackNavigation(blocked = state.isBusy)
 
         LaunchedEffect(screenModel) {
             screenModel.events.collectLatest { event ->
