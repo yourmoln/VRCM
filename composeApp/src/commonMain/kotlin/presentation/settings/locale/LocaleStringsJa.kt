@@ -152,10 +152,6 @@ internal val LocaleStringsJa = LocaleStrings(
     galleryTabUploading = "イメージをアップロード中...",
     galleryTabUploadImage = "イメージをアップロード",
     galleryTabLoadFailed = "読み込みに失敗しました",
-    galleryPrintUploading = "プリントをアップロード中...",
-    galleryPrintUploaded = "プリントをアップロードしました",
-    galleryPrintUploadFailed = "プリントのアップロードに失敗しました: %s",
-
     // Print image editor
     printEditorTitle = "プリントを編集",
     printEditorBack = "戻る",
@@ -174,8 +170,13 @@ internal val LocaleStringsJa = LocaleStrings(
     printEditorReadFailed = "画像の読み込みに失敗しました: %s",
     printEditorDecodeFailed = "画像をデコードできませんでした。",
     printEditorRenderFailed = "アップロード用画像の作成に失敗しました。",
-    printEditorUploadFailed = "プリントのアップロードに失敗しました: %s",
+    printEditorUploadAuthenticationFailed = "認証の有効期限が切れました。再ログインしてからもう一度お試しください。",
+    printEditorUploadPermissionFailed = "VRChat がプリントのアップロードを拒否しました。このアカウントの VRC+ 状態を確認してください。",
+    printEditorUploadNetworkFailed = "ネットワークエラーでアップロードが中断されました。接続を確認してもう一度お試しください。",
+    printEditorUploadServerFailed = "VRChat のプリントサービスを利用できません。しばらくしてからもう一度お試しください。",
+    printEditorUploadUnknownFailed = "プリントのアップロードに失敗しました。もう一度お試しください。",
     printEditorUploaded = "プリントをアップロードしました",
+    printEditorSessionExpired = "編集セッションの有効期限が切れました。画像をもう一度選択してください。",
 
     // GalleryScreen
     galleryScreenTitle = "ギャラリー",

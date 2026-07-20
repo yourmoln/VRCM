@@ -44,7 +44,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
                 if (logicalSize.width <= 0 || logicalSize.height <= 0) {
                     throw PrintImageFailure.UnsupportedFormat()
                 }
-                if (logicalSize.width.toLong() * logicalSize.height > MAX_PIXELS) {
+                if (logicalSize.width.toLong() * logicalSize.height > PrintImageLimits.MAX_PIXELS) {
                     throw PrintImageFailure.ImageDimensionsTooLarge
                 }
 
@@ -133,7 +133,6 @@ class IosPlatformImageCodec : PlatformImageCodec {
     }
 
     private companion object {
-        const val MAX_PIXELS = 100_000_000L
         val JPEG_SIGNATURE = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
         val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,

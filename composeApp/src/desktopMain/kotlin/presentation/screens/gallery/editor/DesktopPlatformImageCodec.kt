@@ -29,7 +29,7 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
                         if (rawWidth <= 0 || rawHeight <= 0) {
                             throw PrintImageFailure.UnsupportedFormat()
                         }
-                        if (rawWidth.toLong() * rawHeight > MAX_PIXELS) {
+                        if (rawWidth.toLong() * rawHeight > PrintImageLimits.MAX_PIXELS) {
                             throw PrintImageFailure.ImageDimensionsTooLarge
                         }
 
@@ -83,7 +83,6 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
         }
 
     private companion object {
-        const val MAX_PIXELS = 100_000_000L
         val SUPPORTED_FORMATS = setOf(
             EncodedImageFormat.JPEG,
             EncodedImageFormat.PNG,

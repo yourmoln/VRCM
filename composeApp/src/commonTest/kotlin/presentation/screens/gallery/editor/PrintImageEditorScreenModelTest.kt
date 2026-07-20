@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.colorspace.ColorSpace
 import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.service.PrintUploader
+import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -16,6 +17,7 @@ import kotlinx.coroutines.yield
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class PrintImageEditorScreenModelTest {
@@ -70,7 +72,8 @@ class PrintImageEditorScreenModelTest {
         model.upload()
         yield()
         assertEquals(EditorPhase.Ready, model.state.value.phase)
-        assertIs<EditorError.Upload>(model.state.value.error)
+        val error = assertIs<EditorError.Upload>(model.state.value.error)
+        assertIs<PrintUploadFailure.Unknown>(error.failure)
 
         model.upload()
         yield()
@@ -116,6 +119,28 @@ class PrintImageEditorScreenModelTest {
         assertTrue(requireNotNull(uploader.lastFileName).endsWith(".png"))
     }
 
+    @Test
+    fun disposingEditorModelReleasesSessionData() {
+        val store = PrintImageEditorSessionStore()
+        val source = SelectedImage("source.jpg", byteArrayOf(1))
+        val prepared = PreparedImage(TestImageBitmap, ImageSize(1_920, 1_080))
+        val sessionId = store.create(source, prepared)
+        val model = PrintImageEditorScreenModel(
+            source = source,
+            prepared = prepared,
+            calculator = CropTransformCalculator(),
+            processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) },
+            uploader = FakePrintUploader { _, _ -> Result.success(PrintData("print")) },
+            sessionId = sessionId,
+            sessionStore = store,
+            workerDispatcher = Dispatchers.Unconfined,
+        )
+
+        model.onDispose()
+
+        assertNull(store.get(sessionId))
+    }
+
     private fun createModel(
         processor: PrintImageProcessor,
         uploader: PrintUploader,
@@ -125,6 +150,8 @@ class PrintImageEditorScreenModelTest {
         calculator = CropTransformCalculator(),
         processor = processor,
         uploader = uploader,
+        sessionId = "test-session",
+        sessionStore = PrintImageEditorSessionStore(),
         workerDispatcher = Dispatchers.Unconfined,
         nowMillis = { 123L },
     )

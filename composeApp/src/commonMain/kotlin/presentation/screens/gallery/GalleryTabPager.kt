@@ -15,6 +15,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,6 +35,7 @@ import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
+import io.github.vinceglb.filekit.size
 import io.github.vinceglb.filekit.dialogs.FileKitType
 import io.github.vinceglb.filekit.dialogs.compose.rememberFilePickerLauncher
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
@@ -43,7 +45,9 @@ import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.*
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorScreen
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorSessionStore
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageFailure
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageLimits
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.localizedMessage
@@ -72,11 +76,21 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
         val navigator = LocalNavigator.currentOrThrow
         val printImageProcessor: PrintImageProcessor = koinInject()
+        val editorSessionStore: PrintImageEditorSessionStore = koinInject()
         val locale = strings
 
         val isPrint = tagType == FileTagType.Print
         val coroutineScope = rememberCoroutineScope()
         var isPreparingPrint by remember { mutableStateOf(false) }
+
+        LaunchedEffect(isPrint, editorSessionStore) {
+            if (isPrint) {
+                editorSessionStore.uploadCompletions.collect {
+                    galleryScreenModel.refreshPrints()
+                }
+            }
+        }
+
         val imagePicker = rememberFilePickerLauncher(
             type = FileKitType.File("jpg", "jpeg", "png", "heic", "heif"),
         ) { image ->
@@ -84,6 +98,13 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 coroutineScope.launch {
                     isPreparingPrint = true
                     try {
+                        val fileSize = runCatching { image.size() }.getOrNull()
+                        if (fileSize != null && fileSize > PrintImageLimits.MAX_FILE_BYTES) {
+                            SharedFlowCentre.toastText.emit(
+                                ToastText.Error(locale.printEditorFileTooLarge)
+                            )
+                            return@launch
+                        }
                         val source = runCatching {
                             SelectedImage(image.name, image.readBytes())
                         }.getOrElse {
@@ -104,11 +125,10 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                             SharedFlowCentre.toastText.emit(ToastText.Error(message))
                             return@launch
                         }
-                        navigator.push(
-                            PrintImageEditorScreen(source, prepared) {
-                                galleryScreenModel.refreshPrints()
-                            }
-                        )
+                        val sessionId = editorSessionStore.create(source, prepared)
+                        runCatching { navigator.push(PrintImageEditorScreen(sessionId)) }
+                            .onFailure { editorSessionStore.discard(sessionId) }
+                            .getOrThrow()
                     } finally {
                         isPreparingPrint = false
                     }

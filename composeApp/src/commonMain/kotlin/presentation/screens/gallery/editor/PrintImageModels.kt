@@ -50,6 +50,12 @@ data class PrintCanvasSpec(
     val contentOffsetY: Int = 69,
 )
 
+object PrintImageLimits {
+    const val MAX_FILE_BYTES: Long = 50L * 1024 * 1024
+    const val MAX_PIXELS: Long = 100_000_000L
+    const val MAX_INTERMEDIATE_DECODE_PIXELS: Long = 16_000_000L
+}
+
 sealed class PrintImageFailure(
     message: String,
     cause: Throwable? = null,

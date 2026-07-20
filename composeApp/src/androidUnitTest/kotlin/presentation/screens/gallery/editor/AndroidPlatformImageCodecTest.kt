@@ -52,6 +52,13 @@ class AndroidPlatformImageCodecTest {
         }
         Unit
     }
+
+    @Test
+    fun decodeSampleBoundsIntermediateBitmapMemory() {
+        assertEquals(4, calculateBoundedSampleSize(10_000, 10_000, 5_760))
+        assertEquals(2, calculateBoundedSampleSize(8_000, 6_000, 5_760))
+        assertEquals(1, calculateBoundedSampleSize(3_000, 2_000, 2_048))
+    }
 }
 
 private fun assertDecodableBounds(bytes: ByteArray, expectedMimeType: String) {

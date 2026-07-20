@@ -5,7 +5,7 @@ import kotlin.test.assertTrue
 
 class LocaleActionMessagesTest {
     @Test
-    fun printBoopAndInviteMessagesArePresentInEveryLocale() {
+    fun boopInviteAndRetryMessagesArePresentInEveryLocale() {
         val locales = listOf(
             LocaleStringsEn,
             LocaleStringsJa,
@@ -15,9 +15,6 @@ class LocaleActionMessagesTest {
 
         locales.forEach { locale ->
             val messages = listOf(
-                locale.galleryPrintUploading,
-                locale.galleryPrintUploaded,
-                locale.galleryPrintUploadFailed,
                 locale.recentWorldsRetry,
                 locale.profileBoopSuccess,
                 locale.profileInviteSent,
@@ -54,11 +51,16 @@ class LocaleActionMessagesTest {
                 locale.printEditorImageTooLarge,
                 locale.printEditorDecodeFailed,
                 locale.printEditorRenderFailed,
+                locale.printEditorUploadAuthenticationFailed,
+                locale.printEditorUploadPermissionFailed,
+                locale.printEditorUploadNetworkFailed,
+                locale.printEditorUploadServerFailed,
+                locale.printEditorUploadUnknownFailed,
                 locale.printEditorUploaded,
+                locale.printEditorSessionExpired,
             )
             assertTrue(messages.all { it.isNotBlank() })
             assertTrue(locale.printEditorReadFailed.contains("%s"))
-            assertTrue(locale.printEditorUploadFailed.contains("%s"))
         }
     }
 }

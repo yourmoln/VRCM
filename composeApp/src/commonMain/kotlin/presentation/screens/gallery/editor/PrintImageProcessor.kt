@@ -21,8 +21,8 @@ class DefaultPrintImageProcessor(
     private val codec: PlatformImageCodec,
     private val calculator: CropTransformCalculator,
     private val spec: PrintCanvasSpec = PrintCanvasSpec(),
-    private val maxFileBytes: Int = DEFAULT_MAX_FILE_BYTES,
-    private val maxPixels: Long = DEFAULT_MAX_PIXELS,
+    private val maxFileBytes: Int = PrintImageLimits.MAX_FILE_BYTES.toInt(),
+    private val maxPixels: Long = PrintImageLimits.MAX_PIXELS,
 ) : PrintImageProcessor {
     override suspend fun prepare(source: SelectedImage): Result<PreparedImage> = runCatching {
         validateSource(source)
@@ -41,7 +41,7 @@ class DefaultPrintImageProcessor(
         validateSource(source)
         val decoded = decode(source.bytes, FINAL_MAX_DIMENSION)
         validateDimensions(decoded.originalSize)
-        val output = renderCanvas(decoded.bitmap, transform)
+        val output = renderCanvas(decoded.bitmap, decoded.originalSize, transform)
         val bytes = try {
             codec.encodePng(output)
         } catch (failure: PrintImageFailure) {
@@ -63,7 +63,11 @@ class DefaultPrintImageProcessor(
         throw PrintImageFailure.DecodeFailed(cause)
     }
 
-    private fun renderCanvas(source: ImageBitmap, transform: CropTransform): ImageBitmap = try {
+    private fun renderCanvas(
+        source: ImageBitmap,
+        originalSize: ImageSize,
+        transform: CropTransform,
+    ): ImageBitmap = try {
         val output = ImageBitmap(
             width = spec.canvasWidth,
             height = spec.canvasHeight,
@@ -77,7 +81,7 @@ class DefaultPrintImageProcessor(
 
         val viewport = ImageSize(spec.contentWidth, spec.contentHeight)
         val geometry = calculator.geometry(
-            source = ImageSize(source.width, source.height),
+            source = originalSize,
             viewport = viewport,
             transform = transform,
         )
@@ -154,8 +158,6 @@ class DefaultPrintImageProcessor(
     private companion object {
         const val PREVIEW_MAX_DIMENSION = 2_048
         const val FINAL_MAX_DIMENSION = 5_760
-        const val DEFAULT_MAX_FILE_BYTES = 50 * 1024 * 1024
-        const val DEFAULT_MAX_PIXELS = 100_000_000L
         const val PNG_HEADER_SIZE = 24
         const val PNG_CHUNK_TYPE_OFFSET = 12
         const val PNG_WIDTH_OFFSET = 16

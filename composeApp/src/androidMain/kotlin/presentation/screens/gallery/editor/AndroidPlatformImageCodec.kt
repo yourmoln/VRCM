@@ -26,7 +26,7 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                 if (rawWidth <= 0 || rawHeight <= 0 || !bytes.hasSupportedImageSignature()) {
                     throw PrintImageFailure.UnsupportedFormat()
                 }
-                if (rawWidth.toLong() * rawHeight > MAX_PIXELS) {
+                if (rawWidth.toLong() * rawHeight > PrintImageLimits.MAX_PIXELS) {
                     throw PrintImageFailure.ImageDimensionsTooLarge
                 }
 
@@ -37,7 +37,7 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                     height = if (swapsDimensions) rawWidth else rawHeight,
                 )
                 val decodeOptions = BitmapFactory.Options().apply {
-                    inSampleSize = calculateSampleSize(rawWidth, rawHeight, maxDimension)
+                    inSampleSize = calculateBoundedSampleSize(rawWidth, rawHeight, maxDimension)
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
                 val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOptions)
@@ -80,14 +80,6 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
             )
         }
     }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-
-    private fun calculateSampleSize(width: Int, height: Int, maxDimension: Int): Int {
-        var sampleSize = 1
-        while (max(width, height) / (sampleSize * 2) >= maxDimension) {
-            sampleSize *= 2
-        }
-        return sampleSize
-    }
 
     private fun applyOrientation(source: Bitmap, orientation: Int): Bitmap {
         val matrix = Matrix().apply {
@@ -147,7 +139,6 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
     }
 
     private companion object {
-        const val MAX_PIXELS = 100_000_000L
         val JPEG_SIGNATURE = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
         val PNG_SIGNATURE = byteArrayOf(
             0x89.toByte(), 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
@@ -168,5 +159,23 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
             ExifInterface.ORIENTATION_TRANSVERSE,
             ExifInterface.ORIENTATION_ROTATE_270,
         )
+    }
+}
+
+internal fun calculateBoundedSampleSize(
+    width: Int,
+    height: Int,
+    maxDimension: Int,
+): Int {
+    require(width > 0 && height > 0 && maxDimension > 0)
+    var sampleSize = 1
+    while (true) {
+        val sampledWidth = (width.toLong() + sampleSize - 1) / sampleSize
+        val sampledHeight = (height.toLong() + sampleSize - 1) / sampleSize
+        val withinPixelBudget = sampledWidth * sampledHeight <=
+                PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS
+        val withinDimensionBudget = max(sampledWidth, sampledHeight) <= maxDimension.toLong() * 2
+        if (withinPixelBudget && withinDimensionBudget) return sampleSize
+        sampleSize *= 2
     }
 }

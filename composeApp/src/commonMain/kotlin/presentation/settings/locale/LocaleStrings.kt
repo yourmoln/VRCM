@@ -157,10 +157,6 @@ data class LocaleStrings(
     val galleryTabUploading: String = "Uploading image...",
     val galleryTabUploadImage: String = "Upload Image",
     val galleryTabLoadFailed: String = "Loading Failed",
-    val galleryPrintUploading: String = "Uploading print...",
-    val galleryPrintUploaded: String = "Print uploaded",
-    val galleryPrintUploadFailed: String = "Print upload failed: %s",
-
     // Print image editor
     val printEditorTitle: String = "Edit Print",
     val printEditorBack: String = "Back",
@@ -179,8 +175,13 @@ data class LocaleStrings(
     val printEditorReadFailed: String = "Failed to read the image: %s",
     val printEditorDecodeFailed: String = "The image could not be decoded.",
     val printEditorRenderFailed: String = "The image could not be prepared for upload.",
-    val printEditorUploadFailed: String = "Print upload failed: %s",
+    val printEditorUploadAuthenticationFailed: String = "Authentication expired. Sign in again and retry.",
+    val printEditorUploadPermissionFailed: String = "VRChat rejected the Print upload. Check that this account has VRC+.",
+    val printEditorUploadNetworkFailed: String = "A network error interrupted the upload. Check your connection and retry.",
+    val printEditorUploadServerFailed: String = "The VRChat Print service is unavailable. Try again later.",
+    val printEditorUploadUnknownFailed: String = "Print upload failed. Try again.",
     val printEditorUploaded: String = "Print uploaded",
+    val printEditorSessionExpired: String = "This editing session has expired. Select the image again.",
 
     // GalleryScreen
     val galleryScreenTitle: String = "Gallery",

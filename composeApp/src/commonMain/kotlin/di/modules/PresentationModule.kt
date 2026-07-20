@@ -13,10 +13,9 @@ import io.github.vrcmteam.vrcm.presentation.screens.avatar.NetworkAvatarProfileL
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.CropTransformCalculator
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.DefaultPrintImageProcessor
-import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PreparedImage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorSessionStore
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
-import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendListPagerModel
@@ -54,15 +53,23 @@ val presentationModule: Module = module {
     factoryOf(::FriendNetworkScreenModel)
     singleOf(::GalleryScreenModel)
     single { CropTransformCalculator() }
+    singleOf(::PrintImageEditorSessionStore)
     single<PrintImageProcessor> { DefaultPrintImageProcessor(get(), get()) }
     singleOf(::PrintUploadService) bind PrintUploader::class
     factory { parameters ->
+        val sessionId = parameters.get<String>()
+        val sessionStore = get<PrintImageEditorSessionStore>()
+        val session = requireNotNull(sessionStore.get(sessionId)) {
+            "Print image editor session is unavailable"
+        }
         PrintImageEditorScreenModel(
-            source = parameters.get<SelectedImage>(),
-            prepared = parameters.get<PreparedImage>(),
+            source = session.source,
+            prepared = session.prepared,
             calculator = get(),
             processor = get(),
             uploader = get(),
+            sessionId = sessionId,
+            sessionStore = sessionStore,
         )
     }
     singleOf (::FriendLocationPagerModel)

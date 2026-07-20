@@ -24,7 +24,6 @@ import androidx.compose.material.icons.automirrored.filled.RotateLeft
 import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -64,49 +63,57 @@ import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.core.annotation.InternalVoyagerApi
 import cafe.adriel.voyager.core.screen.Screen
 import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
-import cafe.adriel.voyager.navigator.internal.BackHandler
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.presentation.compoments.ATooltipBox
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.settings.locale.LocaleStrings
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
+import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import kotlinx.coroutines.flow.collectLatest
 import org.koin.compose.koinInject
 import org.koin.core.parameter.parametersOf
 import kotlin.math.roundToInt
 
 class PrintImageEditorScreen(
-    private val source: SelectedImage,
-    private val prepared: PreparedImage,
-    private val onUploaded: () -> Unit,
+    private val sessionId: String,
 ) : Screen {
-    @OptIn(ExperimentalMaterial3Api::class, InternalVoyagerApi::class)
+    @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     override fun Content() {
         val navigator = LocalNavigator.currentOrThrow
         val calculator: CropTransformCalculator = koinInject()
-        val screenModel: PrintImageEditorScreenModel = koinScreenModel {
-            parametersOf(source, prepared)
-        }
-        val state by screenModel.state.collectAsState()
-        val snackbarHostState = remember { SnackbarHostState() }
-        val currentOnUploaded by rememberUpdatedState(onUploaded)
+        val sessionStore: PrintImageEditorSessionStore = koinInject()
+        val sessionAvailable = remember(sessionId) { sessionStore.get(sessionId) != null }
         val locale = strings
         val currentLocale by rememberUpdatedState(locale)
 
-        BackHandler(enabled = state.isBusy) {}
+        if (!sessionAvailable) {
+            LaunchedEffect(sessionId) {
+                SharedFlowCentre.toastText.emit(ToastText.Error(locale.printEditorSessionExpired))
+                navigator.pop()
+            }
+            Box(modifier = Modifier.fillMaxSize())
+            return
+        }
+
+        val screenModel: PrintImageEditorScreenModel = koinScreenModel {
+            parametersOf(sessionId)
+        }
+        val state by screenModel.state.collectAsState()
+        val snackbarHostState = remember { SnackbarHostState() }
+
+        BlockBackNavigation(enabled = state.isBusy)
 
         LaunchedEffect(screenModel) {
             screenModel.events.collectLatest { event ->
                 if (event == EditorEvent.Uploaded) {
+                    sessionStore.complete(sessionId)
                     SharedFlowCentre.toastText.emit(ToastText.Success(currentLocale.printEditorUploaded))
-                    currentOnUploaded()
                     navigator.pop()
                 }
             }
@@ -133,6 +140,26 @@ class PrintImageEditorScreen(
                             )
                         }
                     },
+                    actions = {
+                        ATooltipBox(tooltip = { Text(locale.printEditorUpload) }) {
+                            FilledTonalIconButton(
+                                onClick = screenModel::upload,
+                                enabled = !state.isBusy,
+                            ) {
+                                if (state.isBusy) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(18.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = AppIcons.Publish,
+                                        contentDescription = locale.printEditorUpload,
+                                    )
+                                }
+                            }
+                        }
+                    },
                 )
             },
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -147,7 +174,6 @@ class PrintImageEditorScreen(
                 onFlipHorizontal = screenModel::flipHorizontal,
                 onFlipVertical = screenModel::flipVertical,
                 onReset = screenModel::reset,
-                onUpload = screenModel::upload,
                 locale = locale,
                 modifier = Modifier
                     .fillMaxSize()
@@ -168,7 +194,6 @@ private fun PrintEditorContent(
     onFlipHorizontal: () -> Unit,
     onFlipVertical: () -> Unit,
     onReset: () -> Unit,
-    onUpload: () -> Unit,
     locale: LocaleStrings,
     modifier: Modifier = Modifier,
 ) {
@@ -308,29 +333,6 @@ private fun PrintEditorContent(
                     ) {
                         Icon(Icons.Default.RestartAlt, contentDescription = locale.printEditorReset)
                     }
-                    Button(
-                        onClick = onUpload,
-                        enabled = !state.isBusy,
-                        modifier = Modifier.height(48.dp),
-                    ) {
-                        if (state.isBusy) {
-                            CircularProgressIndicator(
-                                modifier = Modifier.size(18.dp),
-                                strokeWidth = 2.dp,
-                            )
-                        } else {
-                            Icon(AppIcons.Publish, contentDescription = null)
-                        }
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text(
-                            text = when (state.phase) {
-                                EditorPhase.Ready -> locale.printEditorUpload
-                                EditorPhase.Processing -> locale.printEditorProcessing
-                                EditorPhase.Uploading -> locale.printEditorUploading
-                            },
-                            maxLines = 1,
-                        )
-                    }
                 }
             }
         }
@@ -469,10 +471,13 @@ internal fun PrintImageFailure.localizedMessage(locale: LocaleStrings): String =
 
 private fun EditorError.localizedMessage(locale: LocaleStrings): String = when (this) {
     is EditorError.Processing -> failure.localizedMessage(locale)
-    is EditorError.Upload -> locale.printEditorUploadFailed.replace(
-        "%s",
-        detail.ifBlank { locale.unknown },
-    )
+    is EditorError.Upload -> when (failure) {
+        is PrintUploadFailure.Authentication -> locale.printEditorUploadAuthenticationFailed
+        is PrintUploadFailure.Permission -> locale.printEditorUploadPermissionFailed
+        is PrintUploadFailure.Network -> locale.printEditorUploadNetworkFailed
+        is PrintUploadFailure.Server -> locale.printEditorUploadServerFailed
+        is PrintUploadFailure.Unknown -> locale.printEditorUploadUnknownFailed
+    }
 }
 
 private fun ImageSize.isValid(): Boolean = width > 0 && height > 0

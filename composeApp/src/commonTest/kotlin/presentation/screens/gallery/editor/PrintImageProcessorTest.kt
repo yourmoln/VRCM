@@ -69,6 +69,24 @@ abstract class PrintImageProcessorContractTest {
     }
 
     @Test
+    fun renderGeometryUsesOriginalDimensionsFromTheCodec() = runBlocking {
+        val codec = FakePlatformImageCodec(
+            originalSize = ImageSize(9, 16),
+            greenRowsAtTop = 2,
+        )
+        val processor = DefaultPrintImageProcessor(codec, CropTransformCalculator())
+
+        val result = processor.render(
+            source = SelectedImage("portrait.jpg", byteArrayOf(1)),
+            transform = CropTransform(),
+        )
+
+        assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
+        val output = requireNotNull(codec.encodedBitmap).toPixelMap()
+        assertEquals(Color.Red, output[1_024, 70])
+    }
+
+    @Test
     fun invalidPngSignatureIsRejected() = runBlocking {
         val codec = FakePlatformImageCodec(encodedBytes = byteArrayOf(1, 2, 3))
         val processor = DefaultPrintImageProcessor(codec, CropTransformCalculator())
@@ -100,6 +118,7 @@ abstract class PrintImageProcessorContractTest {
 private class FakePlatformImageCodec(
     private val originalSize: ImageSize = ImageSize(1_920, 1_080),
     private val encodedBytes: ByteArray = pngHeader(2_048, 1_440),
+    private val greenRowsAtTop: Int = 0,
 ) : PlatformImageCodec {
     val decodeRequests = mutableListOf<Int>()
     var encodedBitmap: ImageBitmap? = null
@@ -111,6 +130,12 @@ private class FakePlatformImageCodec(
             rect = Rect(0f, 0f, bitmap.width.toFloat(), bitmap.height.toFloat()),
             paint = Paint().apply { color = Color.Red },
         )
+        if (greenRowsAtTop > 0) {
+            Canvas(bitmap).drawRect(
+                rect = Rect(0f, 0f, bitmap.width.toFloat(), greenRowsAtTop.toFloat()),
+                paint = Paint().apply { color = Color.Green },
+            )
+        }
         return DecodedImage(bitmap, originalSize)
     }
 

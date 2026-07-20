@@ -3,6 +3,8 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.service.PrintUploader
+import io.github.vrcmteam.vrcm.service.PrintUploadFailure
+import io.github.vrcmteam.vrcm.service.toPrintUploadFailure
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -24,7 +26,7 @@ enum class EditorPhase {
 
 sealed interface EditorError {
     data class Processing(val failure: PrintImageFailure) : EditorError
-    data class Upload(val detail: String) : EditorError
+    data class Upload(val failure: PrintUploadFailure) : EditorError
 }
 
 sealed interface EditorEvent {
@@ -47,6 +49,8 @@ class PrintImageEditorScreenModel(
     private val calculator: CropTransformCalculator,
     private val processor: PrintImageProcessor,
     private val uploader: PrintUploader,
+    private val sessionId: String,
+    private val sessionStore: PrintImageEditorSessionStore,
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ScreenModel {
@@ -58,6 +62,10 @@ class PrintImageEditorScreenModel(
 
     private var cachedPng: ByteArray? = null
     private var cachedFileName: String? = null
+
+    override fun onDispose() {
+        sessionStore.discard(sessionId)
+    }
 
     fun panAndZoom(
         viewport: ImageSize,
@@ -150,7 +158,7 @@ class PrintImageEditorScreenModel(
                     _state.update {
                         it.copy(
                             phase = EditorPhase.Ready,
-                            error = EditorError.Upload(cause.message.orEmpty()),
+                            error = EditorError.Upload(cause.toPrintUploadFailure()),
                         )
                     }
                 }

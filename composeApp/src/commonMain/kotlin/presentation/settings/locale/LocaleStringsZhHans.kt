@@ -152,10 +152,6 @@ internal val LocaleStringsZhHans = LocaleStrings(
     galleryTabUploading = "正在上传图片...",
     galleryTabUploadImage = "上传图片",
     galleryTabLoadFailed = "加载失败",
-    galleryPrintUploading = "正在上传拍立得...",
-    galleryPrintUploaded = "拍立得上传成功",
-    galleryPrintUploadFailed = "拍立得上传失败: %s",
-
     // Print image editor
     printEditorTitle = "编辑拍立得",
     printEditorBack = "返回",
@@ -174,8 +170,13 @@ internal val LocaleStringsZhHans = LocaleStrings(
     printEditorReadFailed = "读取图片失败: %s",
     printEditorDecodeFailed = "无法解码该图片。",
     printEditorRenderFailed = "无法生成用于上传的图片。",
-    printEditorUploadFailed = "拍立得上传失败: %s",
+    printEditorUploadAuthenticationFailed = "登录状态已失效，请重新登录后重试。",
+    printEditorUploadPermissionFailed = "VRChat 拒绝上传拍立得，请确认该账号拥有 VRC+。",
+    printEditorUploadNetworkFailed = "网络错误导致上传中断，请检查网络后重试。",
+    printEditorUploadServerFailed = "VRChat 拍立得服务暂时不可用，请稍后重试。",
+    printEditorUploadUnknownFailed = "拍立得上传失败，请重试。",
     printEditorUploaded = "拍立得上传成功",
+    printEditorSessionExpired = "编辑会话已失效，请重新选择图片。",
 
     // GalleryScreen
     galleryScreenTitle = "图库",
