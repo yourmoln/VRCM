@@ -11,6 +11,12 @@ import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreenMo
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.NetworkAvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.CropTransformCalculator
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.DefaultPrintImageProcessor
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PreparedImage
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.HomeScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.home.pager.FriendListPagerModel
@@ -26,6 +32,8 @@ import io.github.vrcmteam.vrcm.presentation.settings.theme.ThemeColor
 import io.github.vrcmteam.vrcm.presentation.theme.blue.BlueThemeColor
 import io.github.vrcmteam.vrcm.presentation.theme.green.GreenThemeColor
 import io.github.vrcmteam.vrcm.presentation.theme.pink.PinkThemeColor
+import io.github.vrcmteam.vrcm.service.PrintUploadService
+import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.ktor.client.*
 import okio.FileSystem
 import org.koin.core.definition.Definition
@@ -45,6 +53,18 @@ val presentationModule: Module = module {
     factoryOf(::MutualFriendsScreenModel)
     factoryOf(::FriendNetworkScreenModel)
     singleOf(::GalleryScreenModel)
+    single { CropTransformCalculator() }
+    single<PrintImageProcessor> { DefaultPrintImageProcessor(get(), get()) }
+    singleOf(::PrintUploadService) bind PrintUploader::class
+    factory { parameters ->
+        PrintImageEditorScreenModel(
+            source = parameters.get<SelectedImage>(),
+            prepared = parameters.get<PreparedImage>(),
+            calculator = get(),
+            processor = get(),
+            uploader = get(),
+        )
+    }
     singleOf (::FriendLocationPagerModel)
     singleOf (::FriendListPagerModel)
     singleOf(::SearchListPagerModel)
