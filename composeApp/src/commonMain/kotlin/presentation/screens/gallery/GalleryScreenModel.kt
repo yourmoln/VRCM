@@ -20,12 +20,6 @@ import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import org.koin.core.logger.Logger
 
-data class PrintActionMessages(
-    val uploading: String,
-    val uploaded: String,
-    val uploadFailed: String,
-)
-
 class GalleryScreenModel(
     private val authService: AuthService,
     private val fileApi: FileApi,
@@ -167,31 +161,6 @@ class GalleryScreenModel(
                 // 处理异常
                 SharedFlowCentre.toastText.emit(ToastText.Error("图片上传失败: ${e.message}"))
                 logger.error("Upload exception: ${e.message}")
-            }
-        }
-    }
-
-    fun uploadPrint(imageBytes: ByteArray, fileName: String, messages: PrintActionMessages) {
-        screenModelScope.launch(Dispatchers.IO) {
-            try {
-                SharedFlowCentre.toastText.emit(ToastText.Info(messages.uploading))
-
-                authService.reTryAuthCatching {
-                    printsApi.uploadPrint(imageBytes, fileName)
-                }.onFailure {
-                    logger.error("Upload print failed: ${it.message}")
-                    SharedFlowCentre.toastText.emit(
-                        ToastText.Error(messages.uploadFailed.replace("%s", it.message.orEmpty()))
-                    )
-                }.onSuccess {
-                    SharedFlowCentre.toastText.emit(ToastText.Success(messages.uploaded))
-                    refreshPrints()
-                }
-            } catch (e: Exception) {
-                SharedFlowCentre.toastText.emit(
-                    ToastText.Error(messages.uploadFailed.replace("%s", e.message.orEmpty()))
-                )
-                logger.error("Upload print exception: ${e.message}")
             }
         }
     }

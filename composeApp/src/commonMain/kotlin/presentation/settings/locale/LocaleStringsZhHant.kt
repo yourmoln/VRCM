@@ -156,6 +156,27 @@ internal val LocaleStringsZhHant = LocaleStrings(
     galleryPrintUploaded = "拍立得上傳成功",
     galleryPrintUploadFailed = "拍立得上傳失敗: %s",
 
+    // Print image editor
+    printEditorTitle = "編輯拍立得",
+    printEditorBack = "返回",
+    printEditorUpload = "上傳",
+    printEditorRotateLeft = "向左旋轉",
+    printEditorRotateRight = "向右旋轉",
+    printEditorFlipHorizontal = "水平翻轉",
+    printEditorFlipVertical = "垂直翻轉",
+    printEditorZoom = "縮放",
+    printEditorReset = "重設",
+    printEditorProcessing = "正在處理圖片...",
+    printEditorUploading = "正在上傳拍立得...",
+    printEditorUnsupportedFormat = "不支援此圖片格式。請使用 JPEG 或 PNG；HEIC/HEIF 是否可用取決於系統支援。",
+    printEditorFileTooLarge = "所選檔案超過 50 MiB。",
+    printEditorImageTooLarge = "所選圖片超過 1 億像素。",
+    printEditorReadFailed = "讀取圖片失敗: %s",
+    printEditorDecodeFailed = "無法解碼此圖片。",
+    printEditorRenderFailed = "無法產生用於上傳的圖片。",
+    printEditorUploadFailed = "拍立得上傳失敗: %s",
+    printEditorUploaded = "拍立得上傳成功",
+
     // GalleryScreen
     galleryScreenTitle = "圖庫",
 

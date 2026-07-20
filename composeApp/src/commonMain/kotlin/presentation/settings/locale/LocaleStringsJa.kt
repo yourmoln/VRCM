@@ -156,6 +156,27 @@ internal val LocaleStringsJa = LocaleStrings(
     galleryPrintUploaded = "プリントをアップロードしました",
     galleryPrintUploadFailed = "プリントのアップロードに失敗しました: %s",
 
+    // Print image editor
+    printEditorTitle = "プリントを編集",
+    printEditorBack = "戻る",
+    printEditorUpload = "アップロード",
+    printEditorRotateLeft = "左に回転",
+    printEditorRotateRight = "右に回転",
+    printEditorFlipHorizontal = "左右反転",
+    printEditorFlipVertical = "上下反転",
+    printEditorZoom = "ズーム",
+    printEditorReset = "リセット",
+    printEditorProcessing = "画像を処理中...",
+    printEditorUploading = "プリントをアップロード中...",
+    printEditorUnsupportedFormat = "対応していない画像形式です。JPEG または PNG を使用してください。HEIC/HEIF の対応状況はシステムによって異なります。",
+    printEditorFileTooLarge = "選択したファイルは 50 MiB を超えています。",
+    printEditorImageTooLarge = "選択した画像は 1 億画素を超えています。",
+    printEditorReadFailed = "画像の読み込みに失敗しました: %s",
+    printEditorDecodeFailed = "画像をデコードできませんでした。",
+    printEditorRenderFailed = "アップロード用画像の作成に失敗しました。",
+    printEditorUploadFailed = "プリントのアップロードに失敗しました: %s",
+    printEditorUploaded = "プリントをアップロードしました",
+
     // GalleryScreen
     galleryScreenTitle = "ギャラリー",
 

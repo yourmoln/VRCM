@@ -15,7 +15,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -24,6 +28,8 @@ import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.koin.koinScreenModel
+import cafe.adriel.voyager.navigator.LocalNavigator
+import cafe.adriel.voyager.navigator.currentOrThrow
 import com.skydoves.landscapist.ImageOptions
 import com.skydoves.landscapist.coil3.CoilImage
 import io.github.vinceglb.filekit.name
@@ -36,6 +42,11 @@ import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.*
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorScreen
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageFailure
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.localizedMessage
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.presentation.supports.Pager
@@ -59,26 +70,48 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
     @Composable
     override fun Content() {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
+        val navigator = LocalNavigator.currentOrThrow
+        val printImageProcessor: PrintImageProcessor = koinInject()
+        val locale = strings
 
         val isPrint = tagType == FileTagType.Print
         val coroutineScope = rememberCoroutineScope()
-        val printMessages = PrintActionMessages(
-            uploading = strings.galleryPrintUploading,
-            uploaded = strings.galleryPrintUploaded,
-            uploadFailed = strings.galleryPrintUploadFailed,
-        )
-        val imagePicker = rememberFilePickerLauncher(type = FileKitType.File("png")) { image ->
-            if (image != null) {
+        var isPreparingPrint by remember { mutableStateOf(false) }
+        val imagePicker = rememberFilePickerLauncher(
+            type = FileKitType.File("jpg", "jpeg", "png", "heic", "heif"),
+        ) { image ->
+            if (image != null && !isPreparingPrint) {
                 coroutineScope.launch {
-                    runCatching { image.readBytes() }
-                        .onSuccess { galleryScreenModel.uploadPrint(it, image.name, printMessages) }
-                        .onFailure {
+                    isPreparingPrint = true
+                    try {
+                        val source = runCatching {
+                            SelectedImage(image.name, image.readBytes())
+                        }.getOrElse {
                             SharedFlowCentre.toastText.emit(
                                 ToastText.Error(
-                                    printMessages.uploadFailed.replace("%s", it.message.orEmpty())
+                                    locale.printEditorReadFailed.replace(
+                                        "%s",
+                                        it.message.orEmpty().ifBlank { locale.unknown },
+                                    )
                                 )
                             )
+                            return@launch
                         }
+                        val prepared = printImageProcessor.prepare(source).getOrElse { failure ->
+                            val message = (failure as? PrintImageFailure)
+                                ?.localizedMessage(locale)
+                                ?: locale.printEditorDecodeFailed
+                            SharedFlowCentre.toastText.emit(ToastText.Error(message))
+                            return@launch
+                        }
+                        navigator.push(
+                            PrintImageEditorScreen(source, prepared) {
+                                galleryScreenModel.refreshPrints()
+                            }
+                        )
+                    } finally {
+                        isPreparingPrint = false
+                    }
                 }
             }
         }
@@ -97,15 +130,22 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
 
             if (isPrint) {
                 FloatingActionButton(
-                    onClick = imagePicker::launch,
+                    onClick = { if (!isPreparingPrint) imagePicker.launch() },
                     modifier = Modifier
                         .align(Alignment.BottomEnd)
                         .padding(16.dp),
                 ) {
-                    Icon(
-                        imageVector = AppIcons.Add,
-                        contentDescription = strings.galleryTabUploadImage,
-                    )
+                    if (isPreparingPrint) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            strokeWidth = 2.dp,
+                        )
+                    } else {
+                        Icon(
+                            imageVector = AppIcons.Add,
+                            contentDescription = locale.galleryTabUploadImage,
+                        )
+                    }
                 }
             }
         }

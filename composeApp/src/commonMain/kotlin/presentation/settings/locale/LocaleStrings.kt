@@ -161,6 +161,27 @@ data class LocaleStrings(
     val galleryPrintUploaded: String = "Print uploaded",
     val galleryPrintUploadFailed: String = "Print upload failed: %s",
 
+    // Print image editor
+    val printEditorTitle: String = "Edit Print",
+    val printEditorBack: String = "Back",
+    val printEditorUpload: String = "Upload",
+    val printEditorRotateLeft: String = "Rotate left",
+    val printEditorRotateRight: String = "Rotate right",
+    val printEditorFlipHorizontal: String = "Flip horizontally",
+    val printEditorFlipVertical: String = "Flip vertically",
+    val printEditorZoom: String = "Zoom",
+    val printEditorReset: String = "Reset",
+    val printEditorProcessing: String = "Preparing image...",
+    val printEditorUploading: String = "Uploading print...",
+    val printEditorUnsupportedFormat: String = "Unsupported image format. Use JPEG or PNG; HEIC/HEIF support depends on the system.",
+    val printEditorFileTooLarge: String = "The selected file exceeds 50 MiB.",
+    val printEditorImageTooLarge: String = "The selected image exceeds 100 megapixels.",
+    val printEditorReadFailed: String = "Failed to read the image: %s",
+    val printEditorDecodeFailed: String = "The image could not be decoded.",
+    val printEditorRenderFailed: String = "The image could not be prepared for upload.",
+    val printEditorUploadFailed: String = "Print upload failed: %s",
+    val printEditorUploaded: String = "Print uploaded",
+
     // GalleryScreen
     val galleryScreenTitle: String = "Gallery",
     
