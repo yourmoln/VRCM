@@ -20,10 +20,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.RotateLeft
+import androidx.compose.material.icons.automirrored.filled.RotateRight
 import androidx.compose.material.icons.filled.Flip
 import androidx.compose.material.icons.filled.RestartAlt
-import androidx.compose.material.icons.filled.RotateLeft
-import androidx.compose.material.icons.filled.RotateRight
 import androidx.compose.material3.Button
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.CircularProgressIndicator
@@ -272,14 +272,14 @@ private fun PrintEditorContent(
                         enabled = !state.isBusy && viewport.isValid(),
                         onClick = { onRotateLeft(viewport) },
                     ) {
-                        Icon(Icons.Default.RotateLeft, contentDescription = locale.printEditorRotateLeft)
+                        Icon(Icons.AutoMirrored.Filled.RotateLeft, contentDescription = locale.printEditorRotateLeft)
                     }
                     EditorToolButton(
                         label = locale.printEditorRotateRight,
                         enabled = !state.isBusy && viewport.isValid(),
                         onClick = { onRotateRight(viewport) },
                     ) {
-                        Icon(Icons.Default.RotateRight, contentDescription = locale.printEditorRotateRight)
+                        Icon(Icons.AutoMirrored.Filled.RotateRight, contentDescription = locale.printEditorRotateRight)
                     }
                     EditorToggleButton(
                         label = locale.printEditorFlipHorizontal,

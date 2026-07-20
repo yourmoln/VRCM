@@ -1,6 +1,9 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.ImageBitmapConfig
+import androidx.compose.ui.graphics.colorspace.ColorSpace
+import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.service.PrintUploader
 import kotlinx.coroutines.CompletableDeferred
@@ -118,7 +121,7 @@ class PrintImageEditorScreenModelTest {
         uploader: PrintUploader,
     ) = PrintImageEditorScreenModel(
         source = SelectedImage("source.jpg", byteArrayOf(1)),
-        prepared = PreparedImage(ImageBitmap(16, 9), ImageSize(1_920, 1_080)),
+        prepared = PreparedImage(TestImageBitmap, ImageSize(1_920, 1_080)),
         calculator = CropTransformCalculator(),
         processor = processor,
         uploader = uploader,
@@ -130,6 +133,26 @@ class PrintImageEditorScreenModelTest {
         val VIEWPORT = ImageSize(1_600, 900)
         val PNG_BYTES = byteArrayOf(1, 2, 3)
     }
+}
+
+private data object TestImageBitmap : ImageBitmap {
+    override val width: Int = 16
+    override val height: Int = 9
+    override val colorSpace: ColorSpace = ColorSpaces.Srgb
+    override val hasAlpha: Boolean = true
+    override val config: ImageBitmapConfig = ImageBitmapConfig.Argb8888
+
+    override fun readPixels(
+        buffer: IntArray,
+        startX: Int,
+        startY: Int,
+        width: Int,
+        height: Int,
+        bufferOffset: Int,
+        stride: Int,
+    ) = error("The editor state-machine tests do not read preview pixels")
+
+    override fun prepareToDraw() = Unit
 }
 
 private class FakePrintImageProcessor(

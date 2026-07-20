@@ -12,7 +12,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
-class PrintImageProcessorTest {
+abstract class PrintImageProcessorContractTest {
     @Test
     fun oversizedEncodedFileFailsBeforeDecode() = runBlocking {
         val codec = FakePlatformImageCodec()
@@ -55,7 +55,7 @@ class PrintImageProcessorTest {
             transform = CropTransform(),
         )
 
-        assertTrue(result.isSuccess)
+        assertTrue(result.isSuccess, result.exceptionOrNull()?.stackTraceToString())
         assertEquals(listOf(5_760), codec.decodeRequests)
         val output = requireNotNull(codec.encodedBitmap)
         assertEquals(2_048, output.width)
