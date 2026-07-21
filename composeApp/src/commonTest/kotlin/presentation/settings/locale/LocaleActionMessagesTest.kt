@@ -15,7 +15,7 @@ class LocaleActionMessagesTest {
 
         locales.forEach { locale ->
             val messages = listOf(
-                locale.recentWorldsRetry,
+                locale.retry,
                 locale.profileBoopSuccess,
                 locale.profileInviteSent,
                 locale.profileInviteNotInInstance,
@@ -49,6 +49,7 @@ class LocaleActionMessagesTest {
                 locale.printEditorUnsupportedFormat,
                 locale.printEditorFileTooLarge,
                 locale.printEditorImageTooLarge,
+                locale.printEditorDesktopRegionDecodeUnavailable,
                 locale.printEditorDecodeFailed,
                 locale.printEditorRenderFailed,
                 locale.printEditorUploadAuthenticationFailed,

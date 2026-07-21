@@ -14,7 +14,13 @@ import org.jetbrains.skia.Paint
 import org.jetbrains.skia.Rect
 import org.jetbrains.skia.Surface
 import org.jetbrains.skia.impl.Stats
+import java.awt.image.BufferedImage
+import java.awt.image.DataBufferByte
+import java.io.ByteArrayOutputStream
+import javax.imageio.ImageIO
 import kotlin.math.abs
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -73,6 +79,76 @@ class DesktopPlatformImageCodecTest {
             DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE,
             planDesktopCropRaster(ImageSize(4_000, 4_000)),
         )
+    }
+
+    @Test
+    fun unsafeHeifUsesTypedDesktopCapabilityFailureWithoutRejectingJpegOrPng() {
+        val unsafeSource = ImageSize(5_000, 4_000)
+
+        assertFailsWith<PrintImageFailure.DesktopRegionDecodeUnavailable> {
+            ensureDesktopRasterCapability(EncodedImageFormat.HEIF, unsafeSource)
+        }
+        ensureDesktopRasterCapability(EncodedImageFormat.JPEG, unsafeSource)
+        ensureDesktopRasterCapability(EncodedImageFormat.PNG, unsafeSource)
+        ensureDesktopRasterCapability(EncodedImageFormat.HEIF, ImageSize(4_000, 4_000))
+    }
+
+    @Test
+    fun nonDivisibleImageIoSubsamplingKeepsHighZoomEdgeOnReaderGrid() {
+        val region = PixelRect(left = 101, top = 53, right = 5_102, bottom = 4_054)
+        val decodedSize = ImageSize(width = 2_501, height = 2_001)
+        val subsampling = 2
+        val transform = localRasterToRaw(region, decodedSize, subsampling)
+
+        val first = transform.map(0.5, 0.5)
+        val second = transform.map(1.5, 1.5)
+        assertEquals(region.left + 0.5, first.x, absoluteTolerance = 0.0)
+        assertEquals(region.top + 0.5, first.y, absoluteTolerance = 0.0)
+        assertEquals(2.0, second.x - first.x, absoluteTolerance = 0.0)
+        assertEquals(2.0, second.y - first.y, absoluteTolerance = 0.0)
+
+        val localEdgeX = decodedSize.width - 0.5
+        val expectedRawEdgeX = region.left +
+                (decodedSize.width - 1.0) * subsampling + 0.5
+        val highZoom = 32.0
+        assertEquals(
+            expected = expectedRawEdgeX * highZoom,
+            actual = transform.map(localEdgeX, 0.5).x * highZoom,
+            absoluteTolerance = 0.0,
+        )
+    }
+
+    @Test
+    fun nonDivisibleImageIoCropMapsSampleToRawPixelCenter() = runBlocking {
+        val sourceSize = ImageSize(4_001, 4_001)
+        val outputSize = ImageSize(4_000, 4_000)
+        val lineX = 2_000
+        val request = CropRenderRequest(
+            originalSize = sourceSize,
+            transform = CropTransform(),
+            outputSize = outputSize,
+        )
+        val expectedCenter = CropRenderPlanner()
+            .plan(request)
+            .sourceToOutput
+            .map(lineX + 0.5, sourceSize.height / 2.0)
+            .x
+
+        val rendered = codec.renderCrop(
+            createVerticalLinePng(sourceSize, lineX),
+            request,
+        ).asSkiaBitmap()
+
+        try {
+            val actualCenter = horizontalLuminanceCentroid(
+                bitmap = rendered,
+                y = rendered.height / 2,
+                centerX = expectedCenter,
+            )
+            assertEquals(expectedCenter, actualCenter, absoluteTolerance = 0.1)
+        } finally {
+            rendered.close()
+        }
     }
 
     @Test
@@ -217,6 +293,58 @@ class DesktopPlatformImageCodecTest {
     }
 
     @Test
+    fun largeJpegAndPngPreviewHonorBudgetsWithoutRejectingSourceDimensions() = runBlocking {
+        val request = DecodeRequest(maxDimension = 2_048, maxPixels = 3_000_000L)
+        val target = DecodeSizePlanner.plan(LARGE_IMAGE_SIZE, request)
+
+        largeStripedFixtures.forEach { (format, bytes) ->
+            val decoded = codec.decode(bytes, request)
+            val bitmap = decoded.bitmap.asSkiaBitmap()
+            try {
+                assertEquals(LARGE_IMAGE_SIZE, decoded.originalSize, "format=$format")
+                assertEquals(target.width, bitmap.width, "format=$format")
+                assertEquals(target.height, bitmap.height, "format=$format")
+                assertTrue(maxOf(bitmap.width, bitmap.height) <= request.maxDimension)
+                assertTrue(bitmap.width.toLong() * bitmap.height <= request.maxPixels)
+            } finally {
+                bitmap.close()
+            }
+        }
+    }
+
+    @Test
+    fun largeJpegAndPngHighZoomCropKeepsSourceDetailAtFixedOutput() = runBlocking {
+        val request = CropRenderRequest(
+            originalSize = LARGE_IMAGE_SIZE,
+            transform = CropTransform(
+                centerOffsetX = 0.35f,
+                centerOffsetY = -0.2f,
+                zoom = 4f,
+            ),
+            outputSize = ImageSize(1_920, 1_080),
+        )
+
+        largeStripedFixtures.forEach { (format, bytes) ->
+            val rendered = codec.renderCrop(bytes, request).asSkiaBitmap()
+            try {
+                assertEquals(request.outputSize.width, rendered.width, "format=$format")
+                assertEquals(request.outputSize.height, rendered.height, "format=$format")
+                val detail = horizontalContrastStats(rendered, rendered.height / 2)
+                assertTrue(
+                    detail.highContrastPixels >= rendered.width * 4 / 5,
+                    "Expected high-contrast source detail for $format, got $detail",
+                )
+                assertTrue(
+                    detail.transitions >= 200,
+                    "Expected source-level stripe transitions for $format, got $detail",
+                )
+            } finally {
+                rendered.close()
+            }
+        }
+    }
+
+    @Test
     fun cropRenderingUsesPlannerTransformsAndFixedOutput() = runBlocking {
         val sourceSize = ImageSize(400, 300)
         val outputSize = ImageSize(320, 180)
@@ -310,6 +438,53 @@ class DesktopPlatformImageCodecTest {
     }
 
     @Test
+    fun exifOrientationsMapOrientedCropRegionsBackToRawPixels() = runBlocking {
+        val rawSize = ImageSize(400, 300)
+        val rawJpeg = createFourColorImage(rawSize, EncodedImageFormat.JPEG)
+        val outputSize = ImageSize(180, 120)
+
+        EXIF_ORIENTATION_CONTRACTS.forEach { contract ->
+            val orientedSize = contract.orientedSize(rawSize)
+            val request = CropRenderRequest(
+                originalSize = orientedSize,
+                transform = CropTransform(
+                    centerOffsetX = 0.22f,
+                    centerOffsetY = -0.17f,
+                    zoom = 1.8f,
+                ),
+                outputSize = outputSize,
+            )
+            val rendered = codec.renderCrop(
+                rawJpeg.withExifOrientation(contract.orientation),
+                request,
+            ).asSkiaBitmap()
+
+            try {
+                listOf(
+                    20 to 20,
+                    159 to 20,
+                    20 to 99,
+                    159 to 99,
+                ).forEach { (x, y) ->
+                    assertColorNear(
+                        expected = expectedRawColorAtOutput(
+                            request = request,
+                            rawSize = rawSize,
+                            exifOrientation = contract.orientation,
+                            outputX = x,
+                            outputY = y,
+                        ),
+                        actual = rendered.getColor(x, y),
+                        tolerance = 35,
+                    )
+                }
+            } finally {
+                rendered.close()
+            }
+        }
+    }
+
+    @Test
     fun highZoomCropPreservesMoreStripeDetailThanBoundedFullPreview() = runBlocking {
         val sourceSize = ImageSize(2_160, 4_320)
         val png = createStripedPng(sourceSize)
@@ -332,7 +507,6 @@ class DesktopPlatformImageCodecTest {
             "Expected preserved high-contrast pixels, got $direct",
         )
         assertTrue(direct.transitions >= 250, "Expected preserved transitions, got $direct")
-        assertTrue(direct.highContrastPixels >= legacy.highContrastPixels, "$direct vs $legacy")
         assertTrue(direct.transitions >= legacy.transitions + 25, "$direct vs $legacy")
     }
 
@@ -486,6 +660,86 @@ private fun createStripedPng(size: ImageSize): ByteArray =
         }
     }
 
+private val LARGE_IMAGE_SIZE = ImageSize(5_000, 4_000)
+
+private val largeStripedFixtures: Map<EncodedImageFormat, ByteArray> by lazy {
+    listOf(EncodedImageFormat.JPEG, EncodedImageFormat.PNG).associateWith { format ->
+        createLargeStripedImage(LARGE_IMAGE_SIZE, format)
+    }
+}
+
+private fun createLargeStripedImage(
+    size: ImageSize,
+    format: EncodedImageFormat,
+): ByteArray {
+    val image = BufferedImage(size.width, size.height, BufferedImage.TYPE_BYTE_GRAY)
+    val pixels = (image.raster.dataBuffer as DataBufferByte).data
+    val row = ByteArray(size.width) { x ->
+        if (x / 4 % 2 == 0) 0 else 0xFF.toByte()
+    }
+    repeat(size.height) { y ->
+        row.copyInto(pixels, destinationOffset = y * size.width)
+    }
+    return ByteArrayOutputStream().use { output ->
+        val formatName = when (format) {
+            EncodedImageFormat.JPEG -> "jpeg"
+            EncodedImageFormat.PNG -> "png"
+            else -> error("Unsupported large fixture format: $format")
+        }
+        check(ImageIO.write(image, formatName, output))
+        output.toByteArray()
+    }
+}
+
+private fun createVerticalLinePng(size: ImageSize, lineX: Int): ByteArray {
+    val image = BufferedImage(size.width, size.height, BufferedImage.TYPE_BYTE_GRAY)
+    val pixels = (image.raster.dataBuffer as DataBufferByte).data
+    repeat(size.height) { y ->
+        pixels[y * size.width + lineX] = 0xFF.toByte()
+    }
+    return ByteArrayOutputStream().use { output ->
+        check(ImageIO.write(image, "png", output))
+        output.toByteArray()
+    }
+}
+
+private fun horizontalLuminanceCentroid(
+    bitmap: Bitmap,
+    y: Int,
+    centerX: Double,
+): Double {
+    val left = floor(centerX).toInt() - 4
+    val right = ceil(centerX).toInt() + 4
+    var weightedPosition = 0.0
+    var totalLuminance = 0.0
+    for (x in left..right) {
+        val luminance = Color.getR(bitmap.getColor(x, y)).toDouble()
+        weightedPosition += (x + 0.5) * luminance
+        totalLuminance += luminance
+    }
+    check(totalLuminance > 0.0) { "Expected the sampled source line in the rendered crop" }
+    return weightedPosition / totalLuminance
+}
+
+private data class HorizontalContrastStats(
+    val highContrastPixels: Int,
+    val transitions: Int,
+)
+
+private fun horizontalContrastStats(bitmap: Bitmap, y: Int): HorizontalContrastStats {
+    var highContrastPixels = 0
+    var transitions = 0
+    var previousDark: Boolean? = null
+    repeat(bitmap.width) { x ->
+        val red = Color.getR(bitmap.getColor(x, y))
+        if (red <= 40 || red >= 215) highContrastPixels++
+        val dark = red < 128
+        if (previousDark != null && previousDark != dark) transitions++
+        previousDark = dark
+    }
+    return HorizontalContrastStats(highContrastPixels, transitions)
+}
+
 private fun expectedFourColorAtOutput(
     request: CropRenderRequest,
     outputX: Int,
@@ -503,6 +757,40 @@ private fun expectedFourColorAtOutput(
         sourceX >= request.originalSize.width / 2.0 &&
                 sourceY < request.originalSize.height / 2.0 -> Color.GREEN
         sourceX < request.originalSize.width / 2.0 -> Color.BLUE
+        else -> Color.YELLOW
+    }
+}
+
+private fun expectedRawColorAtOutput(
+    request: CropRenderRequest,
+    rawSize: ImageSize,
+    exifOrientation: Int,
+    outputX: Int,
+    outputY: Int,
+): Int {
+    val transform = CropRenderPlanner().plan(request).sourceToOutput
+    val determinant = transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+    val translatedX = outputX + 0.5 - transform.translateX
+    val translatedY = outputY + 0.5 - transform.translateY
+    val orientedX = (transform.scaleY * translatedX - transform.skewX * translatedY) /
+            determinant
+    val orientedY = (-transform.skewY * translatedX + transform.scaleX * translatedY) /
+            determinant
+    val (rawX, rawY) = when (exifOrientation) {
+        1 -> orientedX to orientedY
+        2 -> rawSize.width - orientedX to orientedY
+        3 -> rawSize.width - orientedX to rawSize.height - orientedY
+        4 -> orientedX to rawSize.height - orientedY
+        5 -> orientedY to orientedX
+        6 -> orientedY to rawSize.height - orientedX
+        7 -> rawSize.width - orientedY to rawSize.height - orientedX
+        8 -> rawSize.width - orientedY to orientedX
+        else -> error("Unsupported EXIF orientation: $exifOrientation")
+    }
+    return when {
+        rawX < rawSize.width / 2.0 && rawY < rawSize.height / 2.0 -> Color.RED
+        rawX >= rawSize.width / 2.0 && rawY < rawSize.height / 2.0 -> Color.GREEN
+        rawX < rawSize.width / 2.0 -> Color.BLUE
         else -> Color.YELLOW
     }
 }

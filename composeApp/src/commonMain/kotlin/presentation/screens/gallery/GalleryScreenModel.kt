@@ -2,31 +2,24 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery
 
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableStateSetOf
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
-import io.github.vrcmteam.vrcm.AppPlatform
-import io.github.vrcmteam.vrcm.core.extensions.readFileBytes
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
-import io.github.vrcmteam.vrcm.network.api.files.FileApi
 import io.github.vrcmteam.vrcm.network.api.files.data.FileData
 import io.github.vrcmteam.vrcm.network.api.files.data.FileTagType
-import io.github.vrcmteam.vrcm.network.api.prints.PrintsApi
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.extensions.onApiFailure
-import io.github.vrcmteam.vrcm.service.AuthService
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.launch
 import org.koin.core.logger.Logger
 
-class GalleryScreenModel(
-    private val authService: AuthService,
-    private val fileApi: FileApi,
-    private val printsApi: PrintsApi,
+class GalleryScreenModel internal constructor(
+    private val dataSource: GalleryDataSource,
     private val logger: Logger,
-    private val platform: AppPlatform,
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.IO,
 ) : ScreenModel {
 
     companion object {
@@ -61,26 +54,50 @@ class GalleryScreenModel(
     private val _isVrcPlus = mutableStateOf(false)
     val isVrcPlus: Boolean get() = _isVrcPlus.value
 
-    // 选中的文件 ID 集合
-    private val _selectedIds = mutableStateSetOf<String>()
-    val selectedIds: Set<String> get() = _selectedIds
-    val hasSelection: Boolean get() = _selectedIds.isNotEmpty()
+    private data class Selection(
+        val tagType: FileTagType,
+        val ids: Set<String>,
+    )
 
-    fun toggleSelection(id: String) {
-        if (_selectedIds.contains(id)) _selectedIds.remove(id) else _selectedIds.add(id)
+    private val _selection = mutableStateOf<Selection?>(null)
+
+    fun selectedIds(tagType: FileTagType): Set<String> =
+        _selection.value?.takeIf { it.tagType == tagType }?.ids.orEmpty()
+
+    fun hasSelection(tagType: FileTagType): Boolean = selectedIds(tagType).isNotEmpty()
+
+    fun toggleSelection(tagType: FileTagType, id: String) {
+        val current = _selection.value
+        if (current?.tagType != tagType) {
+            _selection.value = Selection(tagType, setOf(id))
+            return
+        }
+        val updatedIds = if (id in current.ids) current.ids - id else current.ids + id
+        _selection.value = updatedIds.takeIf { it.isNotEmpty() }?.let { Selection(tagType, it) }
     }
 
     fun clearSelection() {
-        _selectedIds.clear()
+        _selection.value = null
     }
 
-    fun isSelected(id: String): Boolean = _selectedIds.contains(id)
+    private fun clearSelection(tagType: FileTagType) {
+        if (_selection.value?.tagType == tagType) clearSelection()
+    }
+
+    fun isSelected(tagType: FileTagType, id: String): Boolean = id in selectedIds(tagType)
+
+    private fun retainLoadedSelection(tagType: FileTagType, loadedIds: Set<String>) {
+        val current = _selection.value?.takeIf { it.tagType == tagType } ?: return
+        val retainedIds = current.ids intersect loadedIds
+        _selection.value = retainedIds.takeIf { it.isNotEmpty() }?.let { Selection(tagType, it) }
+    }
 
     fun init() {
+        clearSelection()
         refreshAllFiles()
-        screenModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                _isVrcPlus.value = authService.currentUser().isSupporter
+        screenModelScope.launch(workerDispatcher) {
+            runGalleryCatching {
+                _isVrcPlus.value = dataSource.isCurrentUserSupporter()
             }.onFailure {
                 logger.error("Failed to fetch current user: $it")
             }
@@ -98,18 +115,20 @@ class GalleryScreenModel(
     /**
      * 根据标签类型刷新文件列表
      */
-    fun refreshFiles(tagType: FileTagType, n: Int = 60, offset: Int = 0) {
+    fun refreshFiles(tagType: FileTagType, n: Int = 100, offset: Int = 0) {
         // 设置刷新状态为true
         _isRefreshingByTag[tagType] = true
 
-        screenModelScope.launch(Dispatchers.IO) {
-            authService.reTryAuthCatching { fileApi.getFiles(tagType, n = n, offset = offset) }
+        screenModelScope.launch(workerDispatcher) {
+            runGalleryCatching { dataSource.getFiles(tagType, n, offset) }
                 .onGalleryFailure()
                 .onSuccess { files ->
                     // 更新文件列表
-                    _filesByTag[tagType] = files.sortedByDescending { file ->
+                    val sortedFiles = files.sortedByDescending { file ->
                         file.versions.maxByOrNull { it.version }?.createdAt
                     }
+                    _filesByTag[tagType] = sortedFiles
+                    retainLoadedSelection(tagType, sortedFiles.mapTo(mutableSetOf(), FileData::id))
                 }
                 .also {
                     // 设置刷新状态为false
@@ -123,12 +142,13 @@ class GalleryScreenModel(
      */
     fun refreshPrints(n: Int = 100, offset: Int = 0) {
         _isRefreshingPrints.value = true
-        screenModelScope.launch(Dispatchers.IO) {
-            val userId = authService.currentUser().id
-            authService.reTryAuthCatching { printsApi.getUserPrints(userId, n = n, offset = offset) }
+        screenModelScope.launch(workerDispatcher) {
+            runGalleryCatching { dataSource.getPrints(n, offset) }
                 .onGalleryFailure()
                 .onSuccess { prints ->
-                    _prints.value = prints.sortedByDescending { it.createdAt ?: it.timestamp }
+                    val sortedPrints = prints.sortedByDescending { it.createdAt ?: it.timestamp }
+                    _prints.value = sortedPrints
+                    retainLoadedSelection(FileTagType.Print, sortedPrints.mapTo(mutableSetOf(), PrintData::id))
                 }
                 .also {
                     _isRefreshingPrints.value = false
@@ -180,45 +200,6 @@ class GalleryScreenModel(
         }
 
     /**
-     * 上传图片到服务器
-     * @param imagePath 图片文件路径
-     */
-    fun uploadImage(imagePath: String, fileTagType: FileTagType) {
-        screenModelScope.launch(Dispatchers.IO) {
-            try {
-                // 通知用户正在上传
-                SharedFlowCentre.toastText.emit(ToastText.Info("正在上传图片..."))
-
-                // 读取文件字节
-                val fileBytes = platform.readFileBytes(imagePath)
-
-                // 获取文件名
-                val fileName = imagePath.substringAfterLast('\\').substringAfterLast('/')
-
-                // 获取MIME类型
-                val mimeType = getMimeType(fileName)
-
-                // 上传图片文件
-                val result = fileApi.uploadImageFile(fileBytes, fileName, mimeType, fileTagType)
-
-                result.onSuccess {
-                    // 上传成功，刷新图片列表
-                    SharedFlowCentre.toastText.emit(ToastText.Success("图片上传成功"))
-                    refreshFiles(FileTagType.Gallery)
-                }.onFailure {
-                    // 上传失败
-                    SharedFlowCentre.toastText.emit(ToastText.Error("图片上传失败: ${it.message}"))
-                    logger.error("Upload failed: ${it.message}")
-                }
-            } catch (e: Exception) {
-                // 处理异常
-                SharedFlowCentre.toastText.emit(ToastText.Error("图片上传失败: ${e.message}"))
-                logger.error("Upload exception: ${e.message}")
-            }
-        }
-    }
-
-    /**
      * 通过字节数组上传图片到指定标签类型
      * @param fileBytes 文件字节数组
      * @param fileName 文件名
@@ -235,10 +216,16 @@ class GalleryScreenModel(
         successMessage: String,
         failedMessagePrefix: String,
     ) {
-        screenModelScope.launch(Dispatchers.IO) {
+        screenModelScope.launch(workerDispatcher) {
             SharedFlowCentre.toastText.emit(ToastText.Info(uploadingMessage))
-            val mimeType = getMimeType(fileName)
-            val result = fileApi.uploadImageFile(fileBytes, fileName, mimeType, tagType)
+            val format = GalleryUploadImageFormat.fromFileName(fileName)
+            if (format == null) {
+                val message = "$failedMessagePrefix: Unsupported image format"
+                SharedFlowCentre.toastText.emit(ToastText.Error(message))
+                logger.error(message)
+                return@launch
+            }
+            val result = dataSource.uploadImage(fileBytes, fileName, format.mimeType, tagType)
             result.onSuccess {
                 SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
                 refreshFiles(tagType)
@@ -264,14 +251,15 @@ class GalleryScreenModel(
         successMessage: String,
         failedMessagePrefix: String,
     ) {
-        val ids = _selectedIds.toList()
+        val loadedIds = getFilesByTag(tagType).mapTo(mutableSetOf(), FileData::id)
+        val ids = selectedIds(tagType).intersect(loadedIds).toList()
+        clearSelection(tagType)
         if (ids.isEmpty()) return
-        _selectedIds.clear()
-        screenModelScope.launch(Dispatchers.IO) {
+        screenModelScope.launch(workerDispatcher) {
             SharedFlowCentre.toastText.emit(ToastText.Info(deletingMessage))
             var failed = 0
             for (id in ids) {
-                runCatching { fileApi.deleteFile(id) }
+                runGalleryCatching { dataSource.deleteFile(id) }
                     .onFailure { failed++; logger.error("Delete file $id failed: $it") }
             }
             if (failed == 0) {
@@ -296,14 +284,15 @@ class GalleryScreenModel(
         successMessage: String,
         failedMessagePrefix: String,
     ) {
-        val ids = _selectedIds.toList()
+        val loadedIds = prints.mapTo(mutableSetOf(), PrintData::id)
+        val ids = selectedIds(FileTagType.Print).intersect(loadedIds).toList()
+        clearSelection(FileTagType.Print)
         if (ids.isEmpty()) return
-        _selectedIds.clear()
-        screenModelScope.launch(Dispatchers.IO) {
+        screenModelScope.launch(workerDispatcher) {
             SharedFlowCentre.toastText.emit(ToastText.Info(deletingMessage))
             var failed = 0
             for (id in ids) {
-                runCatching { printsApi.deletePrint(id) }
+                runGalleryCatching { dataSource.deletePrint(id) }
                     .onFailure { failed++; logger.error("Delete print $id failed: $it") }
             }
             if (failed == 0) {
@@ -317,17 +306,4 @@ class GalleryScreenModel(
         }
     }
 
-    /**
-     * 根据文件名获取MIME类型
-     */
-    private fun getMimeType(fileName: String): String {
-        return when {
-            fileName.endsWith(".jpg", ignoreCase = true) || 
-            fileName.endsWith(".jpeg", ignoreCase = true) -> "image/jpeg"
-            fileName.endsWith(".png", ignoreCase = true) -> "image/png"
-            fileName.endsWith(".gif", ignoreCase = true) -> "image/gif"
-            fileName.endsWith(".bmp", ignoreCase = true) -> "image/bmp"
-            else -> "application/octet-stream"
-        }
-    }
 }

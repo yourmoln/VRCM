@@ -20,7 +20,6 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.presentation.extensions.animateScrollToFirst
 import io.github.vrcmteam.vrcm.presentation.extensions.getInsetPadding
 import io.github.vrcmteam.vrcm.presentation.extensions.simpleClickable
-import io.github.vrcmteam.vrcm.presentation.screens.world.shouldLoadNextRecentWorldPage
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import kotlinx.coroutines.flow.distinctUntilChanged
 
@@ -46,7 +45,7 @@ fun GenericSearchList(
     itemContent:  LazyListScope.(Int) -> Unit
 ) {
     val lazyListState = rememberLazyListState()
-    
+
     // 监听返回顶部事件
     LaunchedEffect(key) {
         SharedFlowCentre.toPagerTop.collect {
@@ -55,24 +54,24 @@ fun GenericSearchList(
             }
         }
     }
-    
+
     if (onLoadMore != null) {
-        LaunchedEffect(lazyListState, totalItemsCount) {
+        LaunchedEffect(lazyListState, totalItemsCount, onLoadMore) {
             snapshotFlow {
                 val layoutInfo = lazyListState.layoutInfo
                 val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
                 lastVisibleIndex to totalItemsCount
             }.distinctUntilChanged().collect { (lastVisibleIndex, totalItemsCount) ->
-                if (shouldLoadNextRecentWorldPage(lastVisibleIndex, totalItemsCount)) {
+                if (shouldLoadNextSearchPage(lastVisibleIndex, totalItemsCount)) {
                     onLoadMore()
                 }
             }
         }
     }
-    
+
     val topPadding = getInsetPadding(WindowInsets::getTop) + 80.dp
     val bottomPadding = getInsetPadding(12, WindowInsets::getBottom) + 80.dp
-    
+
     val contentLazyColumn = @Composable {
         LazyColumn(
             modifier = Modifier.fillMaxSize(),
@@ -93,10 +92,10 @@ fun GenericSearchList(
                         value = searchText,
                         onValueChange = updateSearchText
                     )
-                    
+
                     // 自定义顶部内容
                     headerContent()
-                    
+
                     // 标签栏
                     TabRow(
                         selectedTabIndex = selectedTabIndex,
@@ -125,14 +124,14 @@ fun GenericSearchList(
                                 interactionSource = null,
                                 selectedContentColor = MaterialTheme.colorScheme.primary,
                                 unselectedContentColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
-                                text = { 
+                                text = {
                                     Text(
                                         text = title,
                                         style = MaterialTheme.typography.bodyMedium.copy(
                                             fontWeight = if (index == selectedTabIndex) FontWeight.Bold
                                                         else FontWeight.Normal
                                         )
-                                    ) 
+                                    )
                                 }
                             )
                         }
@@ -148,11 +147,11 @@ fun GenericSearchList(
 
         }
     }
-    
+
     if (isRefreshing != null && doRefresh != null) {
         RefreshBox(
-            refreshContainerOffsetY = topPadding, 
-            isRefreshing = isRefreshing, 
+            refreshContainerOffsetY = topPadding,
+            isRefreshing = isRefreshing,
             doRefresh = doRefresh
         ) {
             contentLazyColumn()
@@ -230,10 +229,10 @@ fun AdvancedOptionsPanel(
                 contentDescription = if (expanded) "收起" else "展开"
             )
         }
-        
+
         // 展开时显示内容
         AnimatedVisibility(visible = expanded) {
             content()
         }
     }
-} 
+}

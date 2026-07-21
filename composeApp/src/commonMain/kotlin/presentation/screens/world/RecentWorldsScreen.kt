@@ -26,6 +26,7 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.worlds.WorldsApi
 import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
+import io.github.vrcmteam.vrcm.presentation.compoments.shouldLoadNextPage
 import io.github.vrcmteam.vrcm.presentation.screens.world.data.WorldProfileVo
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
@@ -140,13 +141,6 @@ internal fun <T> prepareRecentWorldPageRetry(
 internal fun <T> RecentWorldPagingState<T>.canAutoLoadNextPage(): Boolean =
     failedOffset != nextOffset
 
-internal fun shouldLoadNextRecentWorldPage(
-    lastVisibleIndex: Int,
-    totalItemsCount: Int,
-    preloadDistance: Int = 5,
-): Boolean = totalItemsCount > 0 &&
-        lastVisibleIndex >= (totalItemsCount - preloadDistance).coerceAtLeast(0)
-
 object RecentWorldsScreen : Screen {
 
     @OptIn(ExperimentalMaterial3Api::class)
@@ -202,7 +196,7 @@ object RecentWorldsScreen : Screen {
                         val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
                         lastVisibleIndex to model.worlds.size
                     }.distinctUntilChanged().collect { (lastVisibleIndex, totalItemsCount) ->
-                        if (shouldLoadNextRecentWorldPage(lastVisibleIndex, totalItemsCount)) {
+                        if (shouldLoadNextPage(lastVisibleIndex, totalItemsCount)) {
                             model.loadMoreRecentWorlds()
                         }
                     }
@@ -233,7 +227,7 @@ object RecentWorldsScreen : Screen {
                                     CircularProgressIndicator(modifier = Modifier.size(24.dp))
                                 } else {
                                     TextButton(onClick = model::retryLoadMoreRecentWorlds) {
-                                        Text(strings.recentWorldsRetry)
+                                        Text(strings.retry)
                                     }
                                 }
                             }

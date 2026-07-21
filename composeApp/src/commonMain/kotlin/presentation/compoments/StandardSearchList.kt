@@ -1,8 +1,23 @@
 package io.github.vrcmteam.vrcm.presentation.compoments
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListScope
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import io.github.vrcmteam.vrcm.network.api.attributes.IUser
 import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
 import io.github.vrcmteam.vrcm.network.api.groups.data.LimitedGroup
@@ -42,7 +57,12 @@ fun StandardSearchList(
     modelContentBuilder: (LazyListScope.() -> Unit)? = null,
     groupContentBuilder: (LazyListScope.() -> Unit)? = null,
     // 是否显示群组标签（替换模型标签）
-    includeGroups: Boolean = false
+    includeGroups: Boolean = false,
+    onLoadMore: (() -> Unit)? = null,
+    totalItemsCount: Int = 0,
+    isLoadingMore: Boolean = false,
+    loadMoreFailed: Boolean = false,
+    onRetryLoadMore: (() -> Unit)? = null,
 ) {
     // 固定的标签页列表：根据includeGroups决定是否显示群组标签
     val tabs = if (includeGroups) {
@@ -53,6 +73,7 @@ fun StandardSearchList(
     val coroutineScope = rememberCoroutineScope()
     val currentNavigator = currentNavigator
     val sharedSuffixKey = LocalSharedSuffixKey.current
+    val retryLoadMore = onRetryLoadMore
     val onUserClick = { user: IUser ->
         // 处理用户点击，导航到用户资料页面
         if (currentNavigator.size <= 1) {
@@ -114,7 +135,9 @@ fun StandardSearchList(
         advancedOptionsContent = {
             // 使用枚举类型调用高级选项内容
             advancedOptionsContent?.invoke(selectedTabType)
-        }
+        },
+        onLoadMore = onLoadMore,
+        totalItemsCount = totalItemsCount,
     ) { tabIndex ->
         when (tabIndex) {
             SearchTabType.USER.index -> { // 用户标签页
@@ -135,6 +158,24 @@ fun StandardSearchList(
                         groups = groupList,
                         onGroupClick = onGroupClick
                     )
+                    if (isLoadingMore || (loadMoreFailed && retryLoadMore != null)) {
+                        item(key = "group-search-load-more") {
+                            Box(
+                                modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                if (isLoadingMore) {
+                                    CircularProgressIndicator(modifier = Modifier.size(24.dp))
+                                } else {
+                                    TextButton(onClick = { retryLoadMore?.invoke() }) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null)
+                                        Spacer(modifier = Modifier.width(8.dp))
+                                        Text(strings.retry)
+                                    }
+                                }
+                            }
+                        }
+                    }
                 } else {
                     renderAvatarItems(
                         avatars = avatarList,

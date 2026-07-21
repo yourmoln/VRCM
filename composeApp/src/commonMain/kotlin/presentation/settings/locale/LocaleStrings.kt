@@ -179,6 +179,8 @@ data class LocaleStrings(
     val printEditorUnsupportedFormat: String = "Unsupported image format. Use JPEG or PNG; HEIC/HEIF support depends on the system.",
     val printEditorFileTooLarge: String = "The selected file exceeds 50 MiB.",
     val printEditorImageTooLarge: String = "The selected image exceeds 100 megapixels.",
+    val printEditorDesktopRegionDecodeUnavailable: String =
+        "This image is too large for safe HEIC/HEIF processing on Desktop. Use JPEG or PNG.",
     val printEditorReadFailed: String = "Failed to read the image: %s",
     val printEditorDecodeFailed: String = "The image could not be decoded.",
     val printEditorRenderFailed: String = "The image could not be prepared for upload.",
@@ -252,7 +254,7 @@ data class LocaleStrings(
     val profileInviteNotInInstance: String = "You are not in an instance",
     val recentWorldsTitle: String = "Recent Worlds",
     val recentWorldsEmpty: String = "No recent worlds",
-    val recentWorldsRetry: String = "Retry",
+    val retry: String = "Retry",
     val avatars: String = "Avatars",
     val friendListPagerAllAvatars: String = "All Avatars",
 

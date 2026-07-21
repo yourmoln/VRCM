@@ -174,6 +174,7 @@ internal val LocaleStringsJa = LocaleStrings(
     printEditorUnsupportedFormat = "対応していない画像形式です。JPEG または PNG を使用してください。HEIC/HEIF の対応状況はシステムによって異なります。",
     printEditorFileTooLarge = "選択したファイルは 50 MiB を超えています。",
     printEditorImageTooLarge = "選択した画像は 1 億画素を超えています。",
+    printEditorDesktopRegionDecodeUnavailable = "この画像はデスクトップで安全に処理できる HEIC/HEIF のサイズを超えています。JPEG または PNG を使用してください。",
     printEditorReadFailed = "画像の読み込みに失敗しました: %s",
     printEditorDecodeFailed = "画像をデコードできませんでした。",
     printEditorRenderFailed = "アップロード用画像の作成に失敗しました。",
@@ -247,7 +248,7 @@ internal val LocaleStringsJa = LocaleStrings(
     profileInviteNotInInstance = "現在インスタンスに参加していません",
     recentWorldsTitle = "最近のワールド",
     recentWorldsEmpty = "最近のワールドはありません",
-    recentWorldsRetry = "再試行",
+    retry = "再試行",
     avatars = "アバター",
     friendListPagerAllAvatars = "すべてのアバター",
 

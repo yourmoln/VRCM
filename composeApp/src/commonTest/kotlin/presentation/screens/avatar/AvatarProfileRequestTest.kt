@@ -4,6 +4,7 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
 import io.github.vrcmteam.vrcm.presentation.compoments.ToastText
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.data.AvatarProfileVo
+import io.github.vrcmteam.vrcm.testing.MainDispatcherTest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -16,7 +17,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
-class AvatarProfileRequestTest {
+class AvatarProfileRequestTest : MainDispatcherTest() {
     @Test
     fun olderSuccessCannotOverwriteTheLatestAvatar() = runBlocking {
         val loader = ControlledAvatarProfileLoader()

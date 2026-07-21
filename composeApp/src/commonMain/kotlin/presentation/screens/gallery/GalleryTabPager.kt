@@ -105,16 +105,15 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
 
         // 非 Print 类型的图片选择器（直接上传）
         val simpleImagePicker = rememberFilePickerLauncher(
-            type = FileKitType.File("jpg", "jpeg", "png", "gif", "webp"),
+            type = FileKitType.File(*GalleryUploadImageFormat.allowedExtensions.toTypedArray()),
         ) { image ->
             if (image != null && !isPreparing) {
                 coroutineScope.launch {
                     isPreparing = true
                     try {
-                        val bytes = runCatching {
+                        val bytes = runGalleryCatching {
                             image.readBoundedBytes(PrintImageLimits.MAX_FILE_BYTES)
                         }.getOrElse {
-                            if (it is CancellationException) throw it
                             val message = if (it is PrintImageFailure.FileTooLarge) {
                                 locale.printEditorFileTooLarge
                             } else {
@@ -199,7 +198,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
             }
 
             // 选中时为红色删除按钮，否则为上传按钮
-            val hasSelection = galleryScreenModel.hasSelection
+            val hasSelection = galleryScreenModel.hasSelection(tagType)
             FloatingActionButton(
                 onClick = {
                     if (hasSelection) {
@@ -307,7 +306,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
         val imageUrl = print.files?.image ?: ""
         val (dialogContent, setDialogContent) = LocationDialogContent.current
-        val selected = galleryScreenModel.isSelected(print.id)
+        val selected = galleryScreenModel.isSelected(FileTagType.Print, print.id)
 
         Box(
             modifier = Modifier
@@ -327,13 +326,15 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                         .clip(MaterialTheme.shapes.medium)
                         .combinedClickable(
                             onClick = {
-                                if (galleryScreenModel.hasSelection) {
-                                    galleryScreenModel.toggleSelection(print.id)
+                                if (galleryScreenModel.hasSelection(FileTagType.Print)) {
+                                    galleryScreenModel.toggleSelection(FileTagType.Print, print.id)
                                 } else {
                                     setDialogContent(ImagePreviewDialog(print.id, print.id, ".png", imageUrl))
                                 }
                             },
-                            onLongClick = { galleryScreenModel.toggleSelection(print.id) },
+                            onLongClick = {
+                                galleryScreenModel.toggleSelection(FileTagType.Print, print.id)
+                            },
                         ),
                     loading = {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -364,7 +365,9 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                     modifier = Modifier
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.3f))
-                        .clickable { galleryScreenModel.toggleSelection(print.id) },
+                        .clickable {
+                            galleryScreenModel.toggleSelection(FileTagType.Print, print.id)
+                        },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(
@@ -423,7 +426,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
     ) {
         val galleryScreenModel: GalleryScreenModel = koinScreenModel()
         val (dialogContent, setDialogContent) = LocationDialogContent.current
-        val selected = galleryScreenModel.isSelected(file.id)
+        val selected = galleryScreenModel.isSelected(tagType, file.id)
 
         Box(
             modifier = Modifier
@@ -455,13 +458,13 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                         )
                         .combinedClickable(
                             onClick = {
-                                if (galleryScreenModel.hasSelection) {
-                                    galleryScreenModel.toggleSelection(file.id)
+                                if (galleryScreenModel.hasSelection(tagType)) {
+                                    galleryScreenModel.toggleSelection(tagType, file.id)
                                 } else {
                                     setDialogContent(ImagePreviewDialog(file.id, file.name, file.extension))
                                 }
                             },
-                            onLongClick = { galleryScreenModel.toggleSelection(file.id) },
+                            onLongClick = { galleryScreenModel.toggleSelection(tagType, file.id) },
                         ),
                     loading = {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -493,7 +496,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                         .fillMaxSize()
                         .background(Color.Black.copy(alpha = 0.3f))
                         .clip(shape)
-                        .clickable { galleryScreenModel.toggleSelection(file.id) },
+                        .clickable { galleryScreenModel.toggleSelection(tagType, file.id) },
                     contentAlignment = Alignment.Center,
                 ) {
                     Icon(

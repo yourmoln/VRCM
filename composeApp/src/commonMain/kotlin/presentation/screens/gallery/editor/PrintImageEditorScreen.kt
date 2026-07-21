@@ -465,6 +465,8 @@ private fun EditorToggleButton(
 internal fun PrintImageFailure.localizedMessage(locale: LocaleStrings): String = when (this) {
     PrintImageFailure.FileTooLarge -> locale.printEditorFileTooLarge
     PrintImageFailure.ImageDimensionsTooLarge -> locale.printEditorImageTooLarge
+    PrintImageFailure.DesktopRegionDecodeUnavailable ->
+        locale.printEditorDesktopRegionDecodeUnavailable
     is PrintImageFailure.UnsupportedFormat -> locale.printEditorUnsupportedFormat
     is PrintImageFailure.DecodeFailed -> locale.printEditorDecodeFailed
     is PrintImageFailure.RenderFailed,

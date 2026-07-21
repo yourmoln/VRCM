@@ -65,6 +65,28 @@ class PrintUploadFailureTest {
         assertSame(cancellation, thrown)
     }
 
+    @Test
+    fun directFatalFailureIsRethrown() = runBlocking {
+        val fatal = AssertionError("fatal")
+
+        val thrown = assertFailsWith<AssertionError> {
+            printUploadResult<String> { throw fatal }
+        }
+
+        assertSame(fatal, thrown)
+    }
+
+    @Test
+    fun returnedFatalFailureIsRethrown() = runBlocking {
+        val fatal = AssertionError("fatal")
+
+        val thrown = assertFailsWith<AssertionError> {
+            printUploadResult<String> { Result.failure(fatal) }
+        }
+
+        assertSame(fatal, thrown)
+    }
+
     private fun apiFailure(status: Int) = VRCApiException(
         description = "status-$status",
         code = status,

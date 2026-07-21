@@ -41,12 +41,13 @@ internal suspend fun <T> printUploadResult(block: suspend () -> Result<T>): Resu
             onSuccess = { Result.success(it) },
             onFailure = { cause ->
                 if (cause is CancellationException) throw cause
+                if (cause !is Exception) throw cause
                 Result.failure(cause.toPrintUploadFailure())
             },
         )
     } catch (cause: CancellationException) {
         throw cause
-    } catch (cause: Throwable) {
+    } catch (cause: Exception) {
         Result.failure(cause.toPrintUploadFailure())
     }
 

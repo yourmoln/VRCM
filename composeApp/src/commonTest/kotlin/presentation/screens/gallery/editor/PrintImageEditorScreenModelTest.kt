@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
+import io.github.vrcmteam.vrcm.testing.MainDispatcherTest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineDispatcher
@@ -23,7 +24,7 @@ import kotlin.test.assertIs
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class PrintImageEditorScreenModelTest {
+class PrintImageEditorScreenModelTest : MainDispatcherTest() {
     @Test
     fun repeatedUploadWhileProcessingStartsOneJob() = runBlocking {
         val gate = CompletableDeferred<Result<ByteArray>>()

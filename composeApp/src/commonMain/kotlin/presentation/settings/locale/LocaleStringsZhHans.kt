@@ -174,6 +174,7 @@ internal val LocaleStringsZhHans = LocaleStrings(
     printEditorUnsupportedFormat = "不支持该图片格式。请使用 JPEG 或 PNG；HEIC/HEIF 是否可用取决于系统支持。",
     printEditorFileTooLarge = "所选文件超过 50 MiB。",
     printEditorImageTooLarge = "所选图片超过 1 亿像素。",
+    printEditorDesktopRegionDecodeUnavailable = "该图片过大，桌面端无法安全处理此 HEIC/HEIF 图片。请使用 JPEG 或 PNG。",
     printEditorReadFailed = "读取图片失败: %s",
     printEditorDecodeFailed = "无法解码该图片。",
     printEditorRenderFailed = "无法生成用于上传的图片。",
@@ -247,7 +248,7 @@ internal val LocaleStringsZhHans = LocaleStrings(
     profileInviteNotInInstance = "你当前不在任何实例中",
     recentWorldsTitle = "最近访问的世界",
     recentWorldsEmpty = "暂无最近访问的世界",
-    recentWorldsRetry = "重试",
+    retry = "重试",
     avatars = "模型",
     friendListPagerAllAvatars = "全部模型",
 

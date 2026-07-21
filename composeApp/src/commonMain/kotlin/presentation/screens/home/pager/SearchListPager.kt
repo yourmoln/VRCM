@@ -45,7 +45,10 @@ object SearchListPager : Pager {
         val users by searchListPagerModel.userSearchList.collectAsState()
         val worlds by searchListPagerModel.worldSearchList.collectAsState()
         val groups by searchListPagerModel.groupSearchList.collectAsState()
-        
+        val groupHasMore by searchListPagerModel.groupHasMore.collectAsState()
+        val isLoadingGroups by searchListPagerModel.isLoadingGroups.collectAsState()
+        val groupLoadMoreFailed by searchListPagerModel.groupLoadMoreFailed.collectAsState()
+
         // 当搜索文本改变时执行搜索
         LaunchedEffect(searchText, searchType) {
             searchListPagerModel.refreshSearchList()
@@ -69,6 +72,26 @@ object SearchListPager : Pager {
             worldList = worlds,
             groupList = groups,
             includeGroups = true,
+            onLoadMore = if (
+                shouldEnableGroupLoadMore(
+                    searchType = searchType,
+                    hasMore = groupHasMore,
+                    isLoading = isLoadingGroups,
+                    itemCount = groups.size,
+                )
+            ) {
+                { searchListPagerModel.loadMoreGroups() }
+            } else {
+                null
+            },
+            totalItemsCount = groups.size.takeIf { searchType == 3 } ?: 0,
+            isLoadingMore = searchType == 3 && groups.isNotEmpty() && isLoadingGroups,
+            loadMoreFailed = shouldShowGroupLoadMoreRetry(
+                searchType = searchType,
+                loadMoreFailed = groupLoadMoreFailed,
+                itemCount = groups.size,
+            ),
+            onRetryLoadMore = searchListPagerModel::retryLoadMoreGroups,
             advancedOptionsContent = { tabType ->
                 // 仅在世界搜索标签下显示高级选项
                 if (tabType == SearchTabType.WORLD) {
@@ -95,6 +118,16 @@ object SearchListPager : Pager {
     }
 }
 
+internal fun shouldEnableGroupLoadMore(
+    searchType: Int,
+    hasMore: Boolean,
+    isLoading: Boolean,
+    itemCount: Int,
+): Boolean = searchType == 3 && hasMore && !isLoading && itemCount > 0
 
-
+internal fun shouldShowGroupLoadMoreRetry(
+    searchType: Int,
+    loadMoreFailed: Boolean,
+    itemCount: Int,
+): Boolean = searchType == 3 && loadMoreFailed && itemCount > 0
 

@@ -1,5 +1,6 @@
 package io.github.vrcmteam.vrcm.presentation.screens.world
 
+import io.github.vrcmteam.vrcm.presentation.compoments.shouldLoadNextPage
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -40,9 +41,9 @@ class RecentWorldPagingTest {
 
     @Test
     fun loadMoreOnlyTriggersNearTheEndOfANonEmptyList() {
-        assertFalse(shouldLoadNextRecentWorldPage(lastVisibleIndex = -1, totalItemsCount = 0))
-        assertFalse(shouldLoadNextRecentWorldPage(lastVisibleIndex = 3, totalItemsCount = 10))
-        assertTrue(shouldLoadNextRecentWorldPage(lastVisibleIndex = 5, totalItemsCount = 10))
+        assertFalse(shouldLoadNextPage(lastVisibleIndex = -1, totalItemsCount = 0))
+        assertFalse(shouldLoadNextPage(lastVisibleIndex = 3, totalItemsCount = 10))
+        assertTrue(shouldLoadNextPage(lastVisibleIndex = 5, totalItemsCount = 10))
     }
 
     @Test

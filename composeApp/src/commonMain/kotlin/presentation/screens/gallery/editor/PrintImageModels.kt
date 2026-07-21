@@ -108,6 +108,9 @@ sealed class PrintImageFailure(
 ) : Exception(message, cause) {
     data object FileTooLarge : PrintImageFailure("Selected image exceeds 50 MiB")
     data object ImageDimensionsTooLarge : PrintImageFailure("Selected image exceeds 100 megapixels")
+    data object DesktopRegionDecodeUnavailable : PrintImageFailure(
+        "Desktop cannot safely region-decode this large image format",
+    )
     class UnsupportedFormat(cause: Throwable? = null) :
         PrintImageFailure("Unsupported image format", cause)
 

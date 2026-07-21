@@ -11,6 +11,8 @@ import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreenMo
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.NetworkAvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryScreenModel
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.GalleryDataSource
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.NetworkGalleryDataSource
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.CropTransformCalculator
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.DefaultPrintImageProcessor
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEditorScreenModel
@@ -51,7 +53,8 @@ val presentationModule: Module = module {
     factoryOf (::UserProfileScreenModel)
     factoryOf(::MutualFriendsScreenModel)
     factoryOf(::FriendNetworkScreenModel)
-    singleOf(::GalleryScreenModel)
+    singleOf(::NetworkGalleryDataSource) bind GalleryDataSource::class
+    single { GalleryScreenModel(get(), get()) }
     single { CropTransformCalculator() }
     singleOf(::PrintImageEditorSessionStore)
     single<PrintImageProcessor> { DefaultPrintImageProcessor(get()) }
