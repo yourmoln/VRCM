@@ -7,6 +7,11 @@ data class ImageSize(
     val height: Int,
 )
 
+data class DecodeRequest(
+    val maxDimension: Int,
+    val maxPixels: Long,
+)
+
 data class CropTransform(
     val centerOffsetX: Float = 0f,
     val centerOffsetY: Float = 0f,
