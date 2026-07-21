@@ -18,7 +18,10 @@ import kotlinx.cinterop.toKString
 import kotlinx.cinterop.useContents
 import kotlinx.cinterop.usePinned
 import kotlinx.cinterop.value
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.EncodedImageFormat
 import org.jetbrains.skia.Image
@@ -75,7 +78,12 @@ import kotlin.math.ceil
 
 @OptIn(ExperimentalForeignApi::class)
 class IosPlatformImageCodec : PlatformImageCodec {
-    private val coreImageContext = CIContext.contextWithOptions(null)
+    private val coreImageContext: CIContext? = try {
+        CIContext.contextWithOptions(null)
+    } catch (_: NullPointerException) {
+        // Kotlin/Native can surface a nil CIContext factory result as an NPE.
+        null
+    }
 
     override suspend fun decode(bytes: ByteArray, maxDimension: Int): DecodedImage = decode(
         bytes,
@@ -111,9 +119,11 @@ class IosPlatformImageCodec : PlatformImageCodec {
                         CGImageRelease(thumbnail)
                     }
                 }
+            } catch (cause: CancellationException) {
+                throw cause
             } catch (failure: PrintImageFailure) {
                 throw failure
-            } catch (cause: Throwable) {
+            } catch (cause: Exception) {
                 throw PrintImageFailure.DecodeFailed(cause)
             }
         }
@@ -122,6 +132,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
         withContext(Dispatchers.Default) {
             try {
                 val metadata = withImageSource(bytes, ::inspect)
+                currentCoroutineContext().ensureActive()
                 if (metadata.orientedSize != request.originalSize) {
                     throw PrintImageFailure.RenderFailed(
                         IllegalArgumentException(
@@ -132,11 +143,28 @@ class IosPlatformImageCodec : PlatformImageCodec {
                 }
 
                 val plan = CropRenderPlanner().plan(request)
-                renderCoreImage(bytes, metadata, plan)
-                    ?: renderUIKitFixedTarget(bytes, request, plan)
+                currentCoroutineContext().ensureActive()
+                when (val coreImage = renderCoreImage(bytes, metadata, plan)) {
+                    is CoreImageRenderOutcome.Rendered -> coreImage.bitmap
+                    CoreImageRenderOutcome.Unavailable -> {
+                        currentCoroutineContext().ensureActive()
+                        if (!canUseUIKitCropFallback(request.originalSize)) {
+                            throw PrintImageFailure.RenderFailed(
+                                IllegalStateException(
+                                    "Core Image is unavailable and UIKit fallback source " +
+                                            "${request.originalSize.width}x${request.originalSize.height} " +
+                                            "exceeds the safe ${PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS}-pixel budget",
+                                ),
+                            )
+                        }
+                        renderUIKitFixedTarget(bytes, request, plan)
+                    }
+                }
+            } catch (cause: CancellationException) {
+                throw cause
             } catch (failure: PrintImageFailure) {
                 throw failure
-            } catch (cause: Throwable) {
+            } catch (cause: Exception) {
                 throw PrintImageFailure.RenderFailed(cause)
             }
         }
@@ -151,9 +179,11 @@ class IosPlatformImageCodec : PlatformImageCodec {
                         it.bytes
                     }
                 }
+            } catch (cause: CancellationException) {
+                throw cause
             } catch (failure: PrintImageFailure) {
                 throw failure
-            } catch (cause: Throwable) {
+            } catch (cause: Exception) {
                 throw PrintImageFailure.EncodeFailed(cause)
             }
         }
@@ -262,13 +292,15 @@ class IosPlatformImageCodec : PlatformImageCodec {
         return longest
     }
 
-    private fun renderCoreImage(
+    private suspend fun renderCoreImage(
         bytes: ByteArray,
         metadata: ImageMetadata,
         plan: CropRenderPlan,
-    ): ImageBitmap? = runCatching {
+    ): CoreImageRenderOutcome {
+        val context = coreImageContext ?: return CoreImageRenderOutcome.Unavailable
         val sourceData = bytes.toNSData()
-        val sourceImage = CIImage.imageWithData(sourceData) ?: return@runCatching null
+        val sourceImage = CIImage.imageWithData(sourceData)
+            ?: return CoreImageRenderOutcome.Unavailable
         val orientedImage = sourceImage.imageByApplyingOrientation(metadata.orientation)
         val normalizedImage = orientedImage.extent.useContents {
             orientedImage.imageByApplyingTransform(
@@ -287,14 +319,15 @@ class IosPlatformImageCodec : PlatformImageCodec {
             plan.outputSize.width.toDouble(),
             plan.outputSize.height.toDouble(),
         )
-        val rendered = coreImageContext.createCGImage(transformed, outputRect)
-        rendered ?: return@runCatching null
+        val rendered = context.createCGImage(transformed, outputRect)
+            ?: return CoreImageRenderOutcome.Unavailable
         try {
-            rendered.toImageBitmap()
+            currentCoroutineContext().ensureActive()
+            return CoreImageRenderOutcome.Rendered(rendered.toImageBitmap())
         } finally {
             CGImageRelease(rendered)
         }
-    }.getOrNull()
+    }
 
     private fun AffineTransform.toCGAffineTransform() = CGAffineTransformMake(
         a = scaleX,
@@ -307,7 +340,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
 
     // Simulator test processes may not provide a usable CIContext. This still rasterizes only
     // the requested fixed target and never creates a normalized full-source image.
-    private fun renderUIKitFixedTarget(
+    private suspend fun renderUIKitFixedTarget(
         bytes: ByteArray,
         request: CropRenderRequest,
         plan: CropRenderPlan,
@@ -351,6 +384,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
         } finally {
             UIGraphicsEndImageContext()
         }
+        currentCoroutineContext().ensureActive()
         val bitmap = UIImagePNGRepresentation(output)
             ?.toByteArray()
             ?.decodeToImageBitmap()
@@ -376,16 +410,6 @@ class IosPlatformImageCodec : PlatformImageCodec {
             bytes = pinned.addressOf(0).reinterpret(),
             length = size.toLong(),
         ) ?: throw PrintImageFailure.UnsupportedFormat()
-    }
-
-    private fun ByteArray.toNSData(): NSData = usePinned { pinned ->
-        NSData.dataWithBytes(bytes = pinned.addressOf(0), length = size.toULong())
-    }
-
-    private fun NSData.toByteArray(): ByteArray = ByteArray(length.toInt()).also { result ->
-        result.usePinned { pinned ->
-            memcpy(pinned.addressOf(0), bytes, length)
-        }
     }
 
     private fun platform.CoreFoundation.CFDictionaryRef.readInt(
@@ -453,6 +477,11 @@ class IosPlatformImageCodec : PlatformImageCodec {
         val orientation: Int,
     )
 
+    private sealed interface CoreImageRenderOutcome {
+        data class Rendered(val bitmap: ImageBitmap) : CoreImageRenderOutcome
+        data object Unavailable : CoreImageRenderOutcome
+    }
+
     private companion object {
         val JPEG_SIGNATURE = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte())
         val PNG_SIGNATURE = byteArrayOf(
@@ -492,3 +521,26 @@ internal fun coreImageExtentNormalization(originX: Double, originY: Double): Aff
         scaleY = 1.0,
         translateY = -originY,
     )
+
+internal fun canUseUIKitCropFallback(originalSize: ImageSize): Boolean =
+    originalSize.width.toLong() * originalSize.height <=
+            PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS
+
+@OptIn(ExperimentalForeignApi::class)
+internal fun ByteArray.toNSData(): NSData = if (isEmpty()) {
+    NSData.dataWithBytes(bytes = null, length = 0u)
+} else {
+    usePinned { pinned ->
+        NSData.dataWithBytes(bytes = pinned.addressOf(0), length = size.toULong())
+    }
+}
+
+@OptIn(ExperimentalForeignApi::class)
+internal fun NSData.toByteArray(): ByteArray {
+    if (length == 0uL) return byteArrayOf()
+    return ByteArray(length.toInt()).also { result ->
+        result.usePinned { pinned ->
+            memcpy(pinned.addressOf(0), bytes, length)
+        }
+    }
+}

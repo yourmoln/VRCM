@@ -33,6 +33,7 @@ import platform.posix.memcpy
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 
@@ -200,6 +201,20 @@ class IosPlatformImageCodecTest {
         val normalizedOrigin = coreImageExtentNormalization(extentOrigin.x, extentOrigin.y)
             .map(extentOrigin.x, extentOrigin.y)
         assertEquals(AffinePoint(0.0, 0.0), normalizedOrigin)
+    }
+
+    @Test
+    fun uikitCropFallbackIsLimitedToIntermediateDecodeBudget() {
+        assertTrue(canUseUIKitCropFallback(ImageSize(4_000, 4_000)))
+        assertFalse(canUseUIKitCropFallback(ImageSize(16_000_001, 1)))
+    }
+
+    @Test
+    fun emptyNativeDataBridgeAvoidsElementZero() {
+        val data = byteArrayOf().toNSData()
+
+        assertEquals(0uL, data.length)
+        assertTrue(data.toByteArray().isEmpty())
     }
 
     @Test
