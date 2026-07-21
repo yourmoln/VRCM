@@ -28,6 +28,15 @@ class GalleryScreenModel(
     private val platform: AppPlatform,
 ) : ScreenModel {
 
+    companion object {
+        /** Gallery/Icon/Print 的上限 */
+        const val MAX_FIXED_FILES = 64
+        /** Emoji 默认上限 */
+        const val MAX_EMOJI_DEFAULT = 32
+        /** Sticker 默认上限 */
+        const val MAX_STICKER_DEFAULT = 32
+    }
+
     // 使用Map存储不同标签类型的图片文件列表
     private val _filesByTag = mutableStateMapOf<FileTagType, List<FileData>>().apply {
         // 不包含 Print，Print 使用独立的 API
@@ -47,8 +56,19 @@ class GalleryScreenModel(
     private val _prints = mutableStateOf<List<PrintData>>(emptyList())
     private val _isRefreshingPrints = mutableStateOf(false)
 
+    // 是否为 VRC+ 用户
+    private val _isVrcPlus = mutableStateOf(false)
+    val isVrcPlus: Boolean get() = _isVrcPlus.value
+
     fun init() {
         refreshAllFiles()
+        screenModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                _isVrcPlus.value = authService.currentUser().isSupporter
+            }.onFailure {
+                logger.error("Failed to fetch current user: $it")
+            }
+        }
     }
 
     private fun refreshAllFiles() {
@@ -118,6 +138,23 @@ class GalleryScreenModel(
         return _isRefreshingByTag[tagType] ?: false
     }
 
+    /**
+     * 获取指定标签类型的当前文件数量
+     */
+    fun getFileCount(tagType: FileTagType): Int = when (tagType) {
+        FileTagType.Print -> prints.size
+        else -> getFilesByTag(tagType).size
+    }
+
+    /**
+     * 获取指定标签类型的数量上限（参照 VRCX）
+     */
+    fun getMaxCount(tagType: FileTagType): Int = when (tagType) {
+        FileTagType.Gallery, FileTagType.Icon, FileTagType.Print -> MAX_FIXED_FILES
+        FileTagType.Emoji -> MAX_EMOJI_DEFAULT
+        FileTagType.Sticker -> MAX_STICKER_DEFAULT
+    }
+
     private inline fun <T> Result<T>.onGalleryFailure() =
         onApiFailure("Gallery") {
             logger.error(it)
@@ -161,6 +198,39 @@ class GalleryScreenModel(
                 // 处理异常
                 SharedFlowCentre.toastText.emit(ToastText.Error("图片上传失败: ${e.message}"))
                 logger.error("Upload exception: ${e.message}")
+            }
+        }
+    }
+
+    /**
+     * 通过字节数组上传图片到指定标签类型
+     * @param fileBytes 文件字节数组
+     * @param fileName 文件名
+     * @param tagType 文件标签类型
+     * @param uploadingMessage 上传中提示
+     * @param successMessage 上传成功提示
+     * @param failedMessagePrefix 上传失败提示前缀
+     */
+    fun uploadImageBytes(
+        fileBytes: ByteArray,
+        fileName: String,
+        tagType: FileTagType,
+        uploadingMessage: String,
+        successMessage: String,
+        failedMessagePrefix: String,
+    ) {
+        screenModelScope.launch(Dispatchers.IO) {
+            SharedFlowCentre.toastText.emit(ToastText.Info(uploadingMessage))
+            val mimeType = getMimeType(fileName)
+            val result = fileApi.uploadImageFile(fileBytes, fileName, mimeType, tagType)
+            result.onSuccess {
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
+                refreshFiles(tagType)
+            }.onFailure {
+                SharedFlowCentre.toastText.emit(
+                    ToastText.Error("$failedMessagePrefix: ${it.message}")
+                )
+                logger.error("Upload failed: ${it.message}")
             }
         }
     }

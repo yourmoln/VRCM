@@ -151,7 +151,10 @@ internal val LocaleStringsJa = LocaleStrings(
     galleryTabNoFiles = "%sファイルがありません",
     galleryTabUploading = "イメージをアップロード中...",
     galleryTabUploadImage = "イメージをアップロード",
+    galleryTabUploadSuccess = "イメージをアップロードしました",
+    galleryTabUploadFailed = "イメージのアップロードに失敗しました",
     galleryTabLoadFailed = "読み込みに失敗しました",
+    galleryTabVrcPlusRequired = "VRC+ が必要です",
     // Print image editor
     printEditorTitle = "プリントを編集",
     printEditorBack = "戻る",

@@ -59,6 +59,9 @@ import org.koin.compose.koinInject
 
 sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
 
+    /** 供 GalleryScreen 读取以展示计数/上限 */
+    val fileTagType: FileTagType get() = tagType
+
     override val index: Int
         get() = tagType.ordinal
 
@@ -80,8 +83,9 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         val locale = strings
 
         val isPrint = tagType == FileTagType.Print
+        val isVrcPlus = galleryScreenModel.isVrcPlus
         val coroutineScope = rememberCoroutineScope()
-        var isPreparingPrint by remember { mutableStateOf(false) }
+        var isPreparing by remember { mutableStateOf(false) }
 
         LaunchedEffect(isPrint, editorSessionStore) {
             if (isPrint) {
@@ -91,12 +95,49 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
             }
         }
 
-        val imagePicker = rememberFilePickerLauncher(
+        // 非 Print 类型的图片选择器（直接上传）
+        val simpleImagePicker = rememberFilePickerLauncher(
+            type = FileKitType.File("jpg", "jpeg", "png", "gif", "webp"),
+        ) { image ->
+            if (image != null && !isPreparing) {
+                coroutineScope.launch {
+                    isPreparing = true
+                    try {
+                        val bytes = runCatching {
+                            image.readBoundedBytes(PrintImageLimits.MAX_FILE_BYTES)
+                        }.getOrElse {
+                            if (it is CancellationException) throw it
+                            val message = if (it is PrintImageFailure.FileTooLarge) {
+                                locale.printEditorFileTooLarge
+                            } else {
+                                locale.printEditorReadFailed.replace(
+                                    "%s",
+                                    it.message.orEmpty().ifBlank { locale.unknown },
+                                )
+                            }
+                            SharedFlowCentre.toastText.emit(ToastText.Error(message))
+                            return@launch
+                        }
+                        galleryScreenModel.uploadImageBytes(
+                            bytes, image.name, tagType,
+                            uploadingMessage = locale.galleryTabUploading,
+                            successMessage = locale.galleryTabUploadSuccess,
+                            failedMessagePrefix = locale.galleryTabUploadFailed,
+                        )
+                    } finally {
+                        isPreparing = false
+                    }
+                }
+            }
+        }
+
+        // Print 类型的图片选择器（经过编辑器）
+        val printImagePicker = rememberFilePickerLauncher(
             type = FileKitType.File("jpg", "jpeg", "png", "heic", "heif"),
         ) { image ->
-            if (image != null && !isPreparingPrint) {
+            if (image != null && !isPreparing) {
                 coroutineScope.launch {
-                    isPreparingPrint = true
+                    isPreparing = true
                     try {
                         val source = runCatching {
                             SelectedImage(
@@ -131,7 +172,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                             .onFailure { editorSessionStore.discard(sessionId) }
                             .getOrThrow()
                     } finally {
-                        isPreparingPrint = false
+                        isPreparing = false
                     }
                 }
             }
@@ -149,24 +190,41 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 }
             }
 
-            if (isPrint) {
-                FloatingActionButton(
-                    onClick = { if (!isPreparingPrint) imagePicker.launch() },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp),
-                ) {
-                    if (isPreparingPrint) {
-                        CircularProgressIndicator(
-                            modifier = Modifier.size(24.dp),
-                            strokeWidth = 2.dp,
-                        )
-                    } else {
-                        Icon(
-                            imageVector = AppIcons.Add,
-                            contentDescription = locale.galleryTabUploadImage,
-                        )
+            // 所有类型都有上传按钮；非 VRC+ 用户显示为灰色不可点击
+            FloatingActionButton(
+                onClick = {
+                    if (!isPreparing && isVrcPlus) {
+                        if (isPrint) printImagePicker.launch() else simpleImagePicker.launch()
                     }
+                },
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(16.dp),
+                containerColor = if (isVrcPlus) {
+                    MaterialTheme.colorScheme.primaryContainer
+                } else {
+                    MaterialTheme.colorScheme.surfaceVariant
+                },
+                contentColor = if (isVrcPlus) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                },
+            ) {
+                if (isPreparing) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Icon(
+                        imageVector = AppIcons.Publish,
+                        contentDescription = if (isVrcPlus) {
+                            locale.galleryTabUploadImage
+                        } else {
+                            locale.galleryTabVrcPlusRequired
+                        },
+                    )
                 }
             }
         }
