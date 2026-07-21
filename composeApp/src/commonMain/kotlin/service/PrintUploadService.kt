@@ -3,6 +3,7 @@ package io.github.vrcmteam.vrcm.service
 import io.github.vrcmteam.vrcm.network.api.prints.PrintsApi
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.network.supports.VRCApiException
+import kotlinx.coroutines.CancellationException
 import kotlinx.io.IOException
 
 interface PrintUploader {
@@ -27,13 +28,27 @@ class PrintUploadService(
     private val printsApi: PrintsApi,
 ) : PrintUploader {
     override suspend fun upload(imageBytes: ByteArray, fileName: String): Result<PrintData> =
-        authService.reTryAuthCatching {
-            printsApi.uploadPrint(imageBytes, fileName)
-        }.fold(
-            onSuccess = { Result.success(it) },
-            onFailure = { Result.failure(it.toPrintUploadFailure()) },
-        )
+        printUploadResult {
+            authService.reTryAuthCatching {
+                printsApi.uploadPrint(imageBytes, fileName)
+            }
+        }
 }
+
+internal suspend fun <T> printUploadResult(block: suspend () -> Result<T>): Result<T> =
+    try {
+        block().fold(
+            onSuccess = { Result.success(it) },
+            onFailure = { cause ->
+                if (cause is CancellationException) throw cause
+                Result.failure(cause.toPrintUploadFailure())
+            },
+        )
+    } catch (cause: CancellationException) {
+        throw cause
+    } catch (cause: Throwable) {
+        Result.failure(cause.toPrintUploadFailure())
+    }
 
 internal fun Throwable.toPrintUploadFailure(): PrintUploadFailure = when (this) {
     is PrintUploadFailure -> this

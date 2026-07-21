@@ -5,6 +5,7 @@ import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import io.github.vrcmteam.vrcm.service.toPrintUploadFailure
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -20,6 +21,11 @@ import kotlin.time.ExperimentalTime
 
 enum class EditorPhase {
     Ready,
+    Processing,
+    Uploading,
+}
+
+private enum class UploadStage {
     Processing,
     Uploading,
 }
@@ -131,37 +137,38 @@ class PrintImageEditorScreenModel(
             error = null,
         )
         screenModelScope.launch(workerDispatcher) {
-            val png = existingPng ?: processor.render(source, current.transform)
-                .getOrElse { cause ->
-                    val failure = cause as? PrintImageFailure
-                        ?: PrintImageFailure.RenderFailed(cause)
-                    _state.update {
-                        it.copy(
-                            phase = EditorPhase.Ready,
-                            error = EditorError.Processing(failure),
-                        )
+            var stage = if (existingPng == null) UploadStage.Processing else UploadStage.Uploading
+            try {
+                val png = existingPng ?: processor.render(source, current.transform)
+                    .getOrThrow()
+                    .also {
+                        cachedPng = it
+                        cachedFileName = "print-${nowMillis()}.png"
                     }
-                    return@launch
-                }
-                .also {
-                    cachedPng = it
-                    cachedFileName = "print-${nowMillis()}.png"
+
+                stage = UploadStage.Uploading
+                _state.update { it.copy(phase = EditorPhase.Uploading, error = null) }
+                uploader.upload(png, cachedFileName ?: "print-${nowMillis()}.png").getOrThrow()
+
+                _state.update { it.copy(phase = EditorPhase.Ready, error = null) }
+                _events.emit(EditorEvent.Uploaded)
+            } catch (cause: CancellationException) {
+                throw cause
+            } catch (cause: Throwable) {
+                val error = when (stage) {
+                    UploadStage.Processing -> EditorError.Processing(
+                        cause as? PrintImageFailure ?: PrintImageFailure.RenderFailed(cause),
+                    )
+                    UploadStage.Uploading -> EditorError.Upload(cause.toPrintUploadFailure())
                 }
 
-            _state.update { it.copy(phase = EditorPhase.Uploading, error = null) }
-            uploader.upload(png, cachedFileName ?: "print-${nowMillis()}.png")
-                .onSuccess {
-                    _state.update { state -> state.copy(phase = EditorPhase.Ready, error = null) }
-                    _events.emit(EditorEvent.Uploaded)
+                _state.update {
+                    it.copy(
+                        phase = EditorPhase.Ready,
+                        error = error,
+                    )
                 }
-                .onFailure { cause ->
-                    _state.update {
-                        it.copy(
-                            phase = EditorPhase.Ready,
-                            error = EditorError.Upload(cause.toPrintUploadFailure()),
-                        )
-                    }
-                }
+            }
         }
     }
 

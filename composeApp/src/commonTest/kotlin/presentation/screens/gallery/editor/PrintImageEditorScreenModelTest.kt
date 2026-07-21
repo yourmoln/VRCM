@@ -7,6 +7,7 @@ import androidx.compose.ui.graphics.colorspace.ColorSpaces
 import io.github.vrcmteam.vrcm.network.api.prints.data.PrintData
 import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -81,6 +82,46 @@ class PrintImageEditorScreenModelTest {
         assertEquals(1, processor.renderCount)
         assertEquals(2, uploader.uploadCount)
         assertEquals(EditorEvent.Uploaded, uploaded.await())
+    }
+
+    @Test
+    fun directUploadFailureReturnsToReadyAndRetryReusesRenderedPng() = runBlocking {
+        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        var attempt = 0
+        val uploader = FakePrintUploader { _, _ ->
+            attempt++
+            if (attempt == 1) throw IllegalStateException("upload")
+            Result.success(PrintData("print"))
+        }
+        val model = createModel(processor, uploader)
+        val uploaded = async(start = CoroutineStart.UNDISPATCHED) { model.events.first() }
+
+        model.upload()
+        yield()
+
+        assertEquals(EditorPhase.Ready, model.state.value.phase)
+        val error = assertIs<EditorError.Upload>(model.state.value.error)
+        assertIs<PrintUploadFailure.Unknown>(error.failure)
+
+        model.upload()
+        yield()
+
+        assertEquals(1, processor.renderCount)
+        assertEquals(2, uploader.uploadCount)
+        assertEquals(EditorEvent.Uploaded, uploaded.await())
+    }
+
+    @Test
+    fun cancellationDoesNotCreateErrorOrResetUploadingPhase() = runBlocking {
+        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        val uploader = FakePrintUploader { _, _ -> throw CancellationException("cancelled") }
+        val model = createModel(processor, uploader)
+
+        model.upload()
+        yield()
+
+        assertEquals(EditorPhase.Uploading, model.state.value.phase)
+        assertNull(model.state.value.error)
     }
 
     @Test
