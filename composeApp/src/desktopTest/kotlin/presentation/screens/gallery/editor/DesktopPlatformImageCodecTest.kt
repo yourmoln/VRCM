@@ -157,7 +157,10 @@ class DesktopPlatformImageCodecTest {
 
     @Test
     fun pngRoundTripPreservesDimensions() = runBlocking {
-        val decoded = codec.decode(createEncodedImage(12, 7, EncodedImageFormat.PNG), 2_048)
+        val decoded = codec.decode(
+            createEncodedImage(12, 7, EncodedImageFormat.PNG),
+            DecodeRequest(2_048, PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS),
+        )
 
         assertEquals(ImageSize(12, 7), decoded.originalSize)
         assertEquals(12, decoded.bitmap.width)
@@ -183,20 +186,6 @@ class DesktopPlatformImageCodecTest {
         assertEquals(DecodeSizePlanner.plan(source, request).height, decoded.bitmap.height)
         assertTrue(maxOf(decoded.bitmap.width, decoded.bitmap.height) <= request.maxDimension)
         assertTrue(decoded.bitmap.width.toLong() * decoded.bitmap.height <= request.maxPixels)
-    }
-
-    @Test
-    fun legacyDecodeUsesDefaultPixelBudget() = runBlocking {
-        val source = ImageSize(1_600, 1_200)
-
-        val decoded = codec.decode(createEncodedImage(source, EncodedImageFormat.PNG), 1_000)
-
-        assertEquals(source, decoded.originalSize)
-        assertTrue(maxOf(decoded.bitmap.width, decoded.bitmap.height) <= 1_000)
-        assertTrue(
-            decoded.bitmap.width.toLong() * decoded.bitmap.height <=
-                    PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS,
-        )
     }
 
     @Test
@@ -283,7 +272,10 @@ class DesktopPlatformImageCodecTest {
 
         val rendered = codec.renderCrop(png, request)
         val direct = stripeStats(rendered.asSkiaBitmap())
-        val preview = codec.decode(png, 2_048).bitmap
+        val preview = codec.decode(
+            png,
+            DecodeRequest(2_048, PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS),
+        ).bitmap
         val legacy = legacyStripeStats(preview, request)
 
         assertTrue(

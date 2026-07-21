@@ -6,7 +6,6 @@ import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import io.github.vrcmteam.vrcm.service.toPrintUploadFailure
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -18,6 +17,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
+import kotlin.coroutines.CoroutineContext
 
 enum class EditorPhase {
     Ready,
@@ -57,7 +57,7 @@ class PrintImageEditorScreenModel(
     private val uploader: PrintUploader,
     private val sessionId: String,
     private val sessionStore: PrintImageEditorSessionStore,
-    private val workerDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val workerContext: CoroutineContext = Dispatchers.Default,
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ScreenModel {
     private val _state = MutableStateFlow(PrintImageEditorState(prepared = prepared))
@@ -136,10 +136,14 @@ class PrintImageEditorScreenModel(
             phase = if (existingPng == null) EditorPhase.Processing else EditorPhase.Uploading,
             error = null,
         )
-        screenModelScope.launch(workerDispatcher) {
+        screenModelScope.launch(workerContext) {
             var stage = if (existingPng == null) UploadStage.Processing else UploadStage.Uploading
             try {
-                val png = existingPng ?: processor.render(source, current.transform)
+                val png = existingPng ?: processor.render(
+                    source = source,
+                    originalSize = current.prepared.originalSize,
+                    transform = current.transform,
+                )
                     .getOrThrow()
                     .also {
                         cachedPng = it
@@ -154,7 +158,7 @@ class PrintImageEditorScreenModel(
                 _events.emit(EditorEvent.Uploaded)
             } catch (cause: CancellationException) {
                 throw cause
-            } catch (cause: Throwable) {
+            } catch (cause: Exception) {
                 val error = when (stage) {
                     UploadStage.Processing -> EditorError.Processing(
                         cause as? PrintImageFailure ?: PrintImageFailure.RenderFailed(cause),

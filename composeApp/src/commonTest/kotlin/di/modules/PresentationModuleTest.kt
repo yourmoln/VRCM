@@ -4,6 +4,8 @@ import androidx.compose.ui.graphics.ImageBitmap
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileLoader
 import io.github.vrcmteam.vrcm.presentation.screens.avatar.AvatarProfileScreenModel
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.DecodedImage
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.CropRenderRequest
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.DecodeRequest
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PlatformImageCodec
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
 import org.koin.dsl.koinApplication
@@ -50,7 +52,10 @@ class PresentationModuleTest {
 }
 
 private data object FakePlatformImageCodec : PlatformImageCodec {
-    override suspend fun decode(bytes: ByteArray, maxDimension: Int): DecodedImage =
+    override suspend fun decode(bytes: ByteArray, request: DecodeRequest): DecodedImage =
+        error("unused")
+
+    override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
         error("unused")
 
     override suspend fun encodePng(bitmap: ImageBitmap): ByteArray = error("unused")

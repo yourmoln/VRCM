@@ -9,6 +9,7 @@ import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -25,7 +26,7 @@ class PrintImageEditorScreenModelTest {
     @Test
     fun repeatedUploadWhileProcessingStartsOneJob() = runBlocking {
         val gate = CompletableDeferred<Result<ByteArray>>()
-        val processor = FakePrintImageProcessor { _, _ -> gate.await() }
+        val processor = FakePrintImageProcessor { _, _, _ -> gate.await() }
         val uploader = FakePrintUploader { _, _ -> Result.success(PrintData("print")) }
         val model = createModel(processor, uploader)
 
@@ -43,7 +44,7 @@ class PrintImageEditorScreenModelTest {
     @Test
     fun processingFailureReturnsToReadyAndKeepsTransform() = runBlocking {
         val failure = PrintImageFailure.RenderFailed(IllegalStateException("render"))
-        val processor = FakePrintImageProcessor { _, _ -> Result.failure(failure) }
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.failure(failure) }
         val uploader = FakePrintUploader { _, _ -> Result.success(PrintData("unused")) }
         val model = createModel(processor, uploader)
         model.panAndZoom(VIEWPORT, panX = 40f, panY = 0f, zoomChange = 1.5f)
@@ -60,7 +61,7 @@ class PrintImageEditorScreenModelTest {
 
     @Test
     fun networkRetryReusesRenderedPng() = runBlocking {
-        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) }
         var attempt = 0
         val uploader = FakePrintUploader { _, _ ->
             attempt++
@@ -86,7 +87,7 @@ class PrintImageEditorScreenModelTest {
 
     @Test
     fun directUploadFailureReturnsToReadyAndRetryReusesRenderedPng() = runBlocking {
-        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) }
         var attempt = 0
         val uploader = FakePrintUploader { _, _ ->
             attempt++
@@ -113,7 +114,7 @@ class PrintImageEditorScreenModelTest {
 
     @Test
     fun cancellationDoesNotCreateErrorOrResetUploadingPhase() = runBlocking {
-        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) }
         val uploader = FakePrintUploader { _, _ -> throw CancellationException("cancelled") }
         val model = createModel(processor, uploader)
 
@@ -125,8 +126,27 @@ class PrintImageEditorScreenModelTest {
     }
 
     @Test
+    fun fatalProcessingFailureIsNotConvertedToEditorError() = runBlocking {
+        val fatal = AssertionError("fatal")
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.failure(fatal) }
+        val uploader = FakePrintUploader { _, _ -> Result.success(PrintData("unused")) }
+        var uncaught: Throwable? = null
+        val workerContext = Dispatchers.Unconfined + CoroutineExceptionHandler { _, cause ->
+            uncaught = cause
+        }
+        val model = createModel(processor, uploader, workerContext = workerContext)
+
+        model.upload()
+        yield()
+
+        assertTrue(uncaught === fatal)
+        assertEquals(EditorPhase.Processing, model.state.value.phase)
+        assertNull(model.state.value.error)
+    }
+
+    @Test
     fun editingAfterNetworkFailureInvalidatesRenderedPng() = runBlocking {
-        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) }
         var attempt = 0
         val uploader = FakePrintUploader { _, _ ->
             attempt++
@@ -147,7 +167,7 @@ class PrintImageEditorScreenModelTest {
 
     @Test
     fun successfulUploadUsesPngFileNameAndEmitsCompletion() = runBlocking {
-        val processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) }
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) }
         val uploader = FakePrintUploader { _, _ -> Result.success(PrintData("print")) }
         val model = createModel(processor, uploader)
         val uploaded = async(start = CoroutineStart.UNDISPATCHED) { model.events.first() }
@@ -170,11 +190,11 @@ class PrintImageEditorScreenModelTest {
             source = source,
             prepared = prepared,
             calculator = CropTransformCalculator(),
-            processor = FakePrintImageProcessor { _, _ -> Result.success(PNG_BYTES) },
+            processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) },
             uploader = FakePrintUploader { _, _ -> Result.success(PrintData("print")) },
             sessionId = sessionId,
             sessionStore = store,
-            workerDispatcher = Dispatchers.Unconfined,
+            workerContext = Dispatchers.Unconfined,
         )
 
         model.onDispose()
@@ -182,18 +202,33 @@ class PrintImageEditorScreenModelTest {
         assertNull(store.get(sessionId))
     }
 
+    @Test
+    fun uploadPassesPreparedOriginalSizeToRenderer() = runBlocking {
+        val processor = FakePrintImageProcessor { _, _, _ -> Result.success(PNG_BYTES) }
+        val uploader = FakePrintUploader { _, _ -> Result.success(PrintData("print")) }
+        val originalSize = ImageSize(6_013, 4_007)
+        val model = createModel(processor, uploader, originalSize)
+
+        model.upload()
+        yield()
+
+        assertEquals(listOf(originalSize), processor.originalSizes)
+    }
+
     private fun createModel(
         processor: PrintImageProcessor,
         uploader: PrintUploader,
+        originalSize: ImageSize = ImageSize(1_920, 1_080),
+        workerContext: kotlin.coroutines.CoroutineContext = Dispatchers.Unconfined,
     ) = PrintImageEditorScreenModel(
         source = SelectedImage("source.jpg", byteArrayOf(1)),
-        prepared = PreparedImage(TestImageBitmap, ImageSize(1_920, 1_080)),
+        prepared = PreparedImage(TestImageBitmap, originalSize),
         calculator = CropTransformCalculator(),
         processor = processor,
         uploader = uploader,
         sessionId = "test-session",
         sessionStore = PrintImageEditorSessionStore(),
-        workerDispatcher = Dispatchers.Unconfined,
+        workerContext = workerContext,
         nowMillis = { 123L },
     )
 
@@ -224,19 +259,22 @@ private data object TestImageBitmap : ImageBitmap {
 }
 
 private class FakePrintImageProcessor(
-    private val renderBlock: suspend (SelectedImage, CropTransform) -> Result<ByteArray>,
+    private val renderBlock: suspend (SelectedImage, ImageSize, CropTransform) -> Result<ByteArray>,
 ) : PrintImageProcessor {
     var renderCount = 0
+    val originalSizes = mutableListOf<ImageSize>()
 
     override suspend fun prepare(source: SelectedImage): Result<PreparedImage> =
         error("prepare is not used by the editor model")
 
     override suspend fun render(
         source: SelectedImage,
+        originalSize: ImageSize,
         transform: CropTransform,
     ): Result<ByteArray> {
         renderCount++
-        return renderBlock(source, transform)
+        originalSizes += originalSize
+        return renderBlock(source, originalSize, transform)
     }
 }
 

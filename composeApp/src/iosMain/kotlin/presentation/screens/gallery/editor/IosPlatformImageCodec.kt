@@ -85,15 +85,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
         null
     }
 
-    override suspend fun decode(bytes: ByteArray, maxDimension: Int): DecodedImage = decode(
-        bytes,
-        DecodeRequest(
-            maxDimension = maxDimension,
-            maxPixels = PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS,
-        ),
-    )
-
-    suspend fun decode(bytes: ByteArray, request: DecodeRequest): DecodedImage =
+    override suspend fun decode(bytes: ByteArray, request: DecodeRequest): DecodedImage =
         withContext(Dispatchers.Default) {
             try {
                 withImageSource(bytes) { source ->
@@ -129,7 +121,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
             }
         }
 
-    suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
+    override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
         withContext(Dispatchers.Default) {
             try {
                 val metadata = withImageSource(bytes, ::inspect)

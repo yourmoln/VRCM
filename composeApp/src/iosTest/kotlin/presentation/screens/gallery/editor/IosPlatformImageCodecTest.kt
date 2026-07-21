@@ -118,20 +118,6 @@ class IosPlatformImageCodecTest {
     }
 
     @Test
-    fun legacyDecodeUsesDefaultPixelBudget() = runBlocking {
-        val source = ImageSize(1_600, 1_200)
-
-        val decoded = codec.decode(createEncodedImage(source, EncodedImageFormat.PNG), 1_000)
-
-        assertEquals(source, decoded.originalSize)
-        assertTrue(maxOf(decoded.bitmap.width, decoded.bitmap.height) <= 1_000)
-        assertTrue(
-            decoded.bitmap.width.toLong() * decoded.bitmap.height <=
-                    PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS,
-        )
-    }
-
-    @Test
     fun cropRenderingUsesPlannerTransforms() = runBlocking {
         val sourceSize = ImageSize(400, 300)
         val outputSize = ImageSize(320, 180)
@@ -265,7 +251,10 @@ class IosPlatformImageCodecTest {
 
         val rendered = codec.renderCrop(png, request)
         val direct = stripeStats(rendered.asSkiaBitmap())
-        val preview = codec.decode(png, 2_048).bitmap
+        val preview = codec.decode(
+            png,
+            DecodeRequest(2_048, PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS),
+        ).bitmap
         val legacy = legacyStripeStats(preview, request)
 
         assertTrue(

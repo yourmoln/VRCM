@@ -34,7 +34,10 @@ class AndroidPlatformImageCodecTest {
     fun pngRoundTripPreservesDimensions() = runBlocking {
         val png = createEncodedBitmap(12, 7, Bitmap.CompressFormat.PNG)
         assertDecodableBounds(png, "image/png")
-        val decoded = codec.decode(png, 2_048)
+        val decoded = codec.decode(
+            png,
+            DecodeRequest(2_048, PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS),
+        )
 
         assertEquals(ImageSize(12, 7), decoded.originalSize)
         assertEquals(12, decoded.bitmap.width)
@@ -83,21 +86,6 @@ class AndroidPlatformImageCodecTest {
         assertEquals(ImageSize(4_100, 4_000), decoded.originalSize)
         assertTrue(maxOf(bitmap.width, bitmap.height) <= 5_760)
         assertTrue(bitmap.width.toLong() * bitmap.height <= 16_000_000L)
-    }
-
-    @Test
-    fun legacyDecodeUsesDefaultPixelBudget() = runBlocking {
-        val png = createEncodedBitmap(4_100, 4_000, Bitmap.CompressFormat.PNG)
-
-        val decoded = codec.decode(png, 5_760)
-        val bitmap = decoded.bitmap.asAndroidBitmap()
-
-        assertEquals(ImageSize(4_100, 4_000), decoded.originalSize)
-        assertTrue(maxOf(bitmap.width, bitmap.height) <= 5_760)
-        assertTrue(
-            bitmap.width.toLong() * bitmap.height <=
-                    PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS,
-        )
     }
 
     @Test

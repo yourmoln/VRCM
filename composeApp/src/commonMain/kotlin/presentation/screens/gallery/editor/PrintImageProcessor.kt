@@ -3,71 +3,124 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.FilterQuality
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.withSave
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
-import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
 
 interface PrintImageProcessor {
     suspend fun prepare(source: SelectedImage): Result<PreparedImage>
 
-    suspend fun render(source: SelectedImage, transform: CropTransform): Result<ByteArray>
+    suspend fun render(
+        source: SelectedImage,
+        originalSize: ImageSize,
+        transform: CropTransform,
+    ): Result<ByteArray>
 }
 
 class DefaultPrintImageProcessor(
     private val codec: PlatformImageCodec,
-    private val calculator: CropTransformCalculator,
     private val spec: PrintCanvasSpec = PrintCanvasSpec(),
     private val maxFileBytes: Int = PrintImageLimits.MAX_FILE_BYTES.toInt(),
     private val maxPixels: Long = PrintImageLimits.MAX_PIXELS,
 ) : PrintImageProcessor {
-    override suspend fun prepare(source: SelectedImage): Result<PreparedImage> = runCatching {
+    override suspend fun prepare(source: SelectedImage): Result<PreparedImage> = try {
         validateSource(source)
-        val decoded = decode(source.bytes, PREVIEW_MAX_DIMENSION)
+        val decoded = decodePreview(source.bytes)
         validateDimensions(decoded.originalSize)
-        PreparedImage(
-            preview = decoded.bitmap,
-            originalSize = decoded.originalSize,
+        Result.success(
+            PreparedImage(
+                preview = decoded.bitmap,
+                originalSize = decoded.originalSize,
+            ),
         )
+    } catch (cause: CancellationException) {
+        throw cause
+    } catch (failure: PrintImageFailure) {
+        Result.failure(failure)
+    } catch (cause: Exception) {
+        Result.failure(PrintImageFailure.DecodeFailed(cause))
     }
 
     override suspend fun render(
         source: SelectedImage,
+        originalSize: ImageSize,
         transform: CropTransform,
-    ): Result<ByteArray> = runCatching {
+    ): Result<ByteArray> = try {
         validateSource(source)
-        val decoded = decode(source.bytes, FINAL_MAX_DIMENSION)
-        validateDimensions(decoded.originalSize)
-        val output = renderCanvas(decoded.bitmap, decoded.originalSize, transform)
-        val bytes = try {
-            codec.encodePng(output)
-        } catch (failure: PrintImageFailure) {
-            throw failure
-        } catch (cause: Throwable) {
-            throw PrintImageFailure.EncodeFailed(cause)
+        validateDimensions(originalSize)
+        val content = renderCrop(source.bytes, originalSize, transform)
+        if (content.width != spec.contentWidth || content.height != spec.contentHeight) {
+            throw PrintImageFailure.RenderFailed(
+                IllegalStateException(
+                    "Crop renderer returned ${content.width}x${content.height}; expected " +
+                            "${spec.contentWidth}x${spec.contentHeight}",
+                ),
+            )
         }
+        val output = renderCanvas(content)
+        val bytes = encodePng(output)
         if (!hasExpectedPngHeader(bytes, spec.canvasWidth, spec.canvasHeight)) {
             throw PrintImageFailure.EncodeFailed()
         }
-        bytes
+        Result.success(bytes)
+    } catch (cause: CancellationException) {
+        throw cause
+    } catch (failure: PrintImageFailure) {
+        Result.failure(failure)
+    } catch (cause: Exception) {
+        Result.failure(PrintImageFailure.RenderFailed(cause))
     }
 
-    private suspend fun decode(bytes: ByteArray, maxDimension: Int): DecodedImage = try {
-        codec.decode(bytes, maxDimension)
+    private suspend fun decodePreview(bytes: ByteArray): DecodedImage = try {
+        codec.decode(
+            bytes,
+            DecodeRequest(
+                maxDimension = PREVIEW_MAX_DIMENSION,
+                maxPixels = PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS,
+            ),
+        )
+    } catch (cause: CancellationException) {
+        throw cause
     } catch (failure: PrintImageFailure) {
         throw failure
-    } catch (cause: Throwable) {
+    } catch (cause: Exception) {
         throw PrintImageFailure.DecodeFailed(cause)
     }
 
-    private fun renderCanvas(
-        source: ImageBitmap,
+    private suspend fun renderCrop(
+        bytes: ByteArray,
         originalSize: ImageSize,
         transform: CropTransform,
     ): ImageBitmap = try {
+        codec.renderCrop(
+            bytes,
+            CropRenderRequest(
+                originalSize = originalSize,
+                transform = transform,
+                outputSize = ImageSize(spec.contentWidth, spec.contentHeight),
+            ),
+        )
+    } catch (cause: CancellationException) {
+        throw cause
+    } catch (failure: PrintImageFailure) {
+        throw failure
+    } catch (cause: Exception) {
+        throw PrintImageFailure.RenderFailed(cause)
+    }
+
+    private suspend fun encodePng(bitmap: ImageBitmap): ByteArray = try {
+        codec.encodePng(bitmap)
+    } catch (cause: CancellationException) {
+        throw cause
+    } catch (failure: PrintImageFailure) {
+        throw failure
+    } catch (cause: Exception) {
+        throw PrintImageFailure.EncodeFailed(cause)
+    }
+
+    private fun renderCanvas(content: ImageBitmap): ImageBitmap = try {
         val output = ImageBitmap(
             width = spec.canvasWidth,
             height = spec.canvasHeight,
@@ -78,51 +131,16 @@ class DefaultPrintImageProcessor(
             rect = Rect(0f, 0f, spec.canvasWidth.toFloat(), spec.canvasHeight.toFloat()),
             paint = Paint().apply { color = Color.White },
         )
-
-        val viewport = ImageSize(spec.contentWidth, spec.contentHeight)
-        val geometry = calculator.geometry(
-            source = originalSize,
-            viewport = viewport,
-            transform = transform,
+        canvas.drawImageRect(
+            image = content,
+            dstOffset = IntOffset(spec.contentOffsetX, spec.contentOffsetY),
+            dstSize = IntSize(spec.contentWidth, spec.contentHeight),
+            paint = Paint(),
         )
-        val oddTurn = transform.quarterTurns.mod(2) != 0
-        val unrotatedWidth = if (oddTurn) geometry.imageHeight else geometry.imageWidth
-        val unrotatedHeight = if (oddTurn) geometry.imageWidth else geometry.imageHeight
-        val paint = Paint().apply {
-            isAntiAlias = true
-            filterQuality = FilterQuality.High
-        }
-
-        canvas.withSave {
-            canvas.clipRect(
-                left = spec.contentOffsetX.toFloat(),
-                top = spec.contentOffsetY.toFloat(),
-                right = (spec.contentOffsetX + spec.contentWidth).toFloat(),
-                bottom = (spec.contentOffsetY + spec.contentHeight).toFloat(),
-            )
-            canvas.translate(
-                dx = spec.contentOffsetX + spec.contentWidth / 2f + geometry.translationX,
-                dy = spec.contentOffsetY + spec.contentHeight / 2f + geometry.translationY,
-            )
-            canvas.rotate(geometry.rotationDegrees)
-            canvas.scale(geometry.scaleXSign, geometry.scaleYSign)
-            canvas.drawImageRect(
-                image = source,
-                dstOffset = IntOffset(
-                    x = (-unrotatedWidth / 2f).roundToInt(),
-                    y = (-unrotatedHeight / 2f).roundToInt(),
-                ),
-                dstSize = IntSize(
-                    width = unrotatedWidth.roundToInt(),
-                    height = unrotatedHeight.roundToInt(),
-                ),
-                paint = paint,
-            )
-        }
         output
     } catch (failure: PrintImageFailure) {
         throw failure
-    } catch (cause: Throwable) {
+    } catch (cause: Exception) {
         throw PrintImageFailure.RenderFailed(cause)
     }
 
@@ -157,7 +175,6 @@ class DefaultPrintImageProcessor(
 
     private companion object {
         const val PREVIEW_MAX_DIMENSION = 2_048
-        const val FINAL_MAX_DIMENSION = 5_760
         const val PNG_HEADER_SIZE = 24
         const val PNG_CHUNK_TYPE_OFFSET = 12
         const val PNG_WIDTH_OFFSET = 16

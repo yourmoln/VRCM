@@ -54,7 +54,7 @@ val presentationModule: Module = module {
     singleOf(::GalleryScreenModel)
     single { CropTransformCalculator() }
     singleOf(::PrintImageEditorSessionStore)
-    single<PrintImageProcessor> { DefaultPrintImageProcessor(get(), get()) }
+    single<PrintImageProcessor> { DefaultPrintImageProcessor(get()) }
     singleOf(::PrintUploadService) bind PrintUploader::class
     factory { parameters ->
         val sessionId = parameters.get<String>()
