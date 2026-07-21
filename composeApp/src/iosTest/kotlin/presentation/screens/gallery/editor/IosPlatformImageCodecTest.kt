@@ -6,6 +6,7 @@ import kotlinx.cinterop.ExperimentalForeignApi
 import kotlinx.cinterop.addressOf
 import kotlinx.cinterop.reinterpret
 import kotlinx.cinterop.usePinned
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Color
@@ -35,11 +36,93 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalForeignApi::class)
 class IosPlatformImageCodecTest {
     private val codec = IosPlatformImageCodec()
+
+    @Test
+    fun localBitmapSizeMismatchReleasesOwnedPixels() {
+        var activeBitmaps = 0
+
+        val failure = assertFailsWith<IllegalStateException> {
+            handoffLocalPlatformImageBitmap(
+                createBitmap = {
+                    activeBitmaps += 1
+                    ImageBitmap(width = 3, height = 2)
+                },
+                releaseBitmap = { activeBitmaps -= 1 },
+            ) { bitmap ->
+                check(bitmap.width == 4 && bitmap.height == 2) {
+                    "Decoded bitmap has unexpected dimensions"
+                }
+                bitmap
+            }
+        }
+
+        assertEquals("Decoded bitmap has unexpected dimensions", failure.message)
+        assertEquals(0, activeBitmaps)
+    }
+
+    @Test
+    fun localBitmapFailuresReleasePixelsAndKeepIdentity() {
+        listOf(
+            CancellationException("cancelled"),
+            IllegalArgumentException("recoverable"),
+            AssertionError("fatal"),
+        ).forEach { expected ->
+            var activeBitmaps = 0
+
+            val thrown = assertFailsWith<Throwable> {
+                handoffLocalPlatformImageBitmap(
+                    createBitmap = {
+                        activeBitmaps += 1
+                        ImageBitmap(width = 3, height = 2)
+                    },
+                    releaseBitmap = { activeBitmaps -= 1 },
+                ) {
+                    throw expected
+                }
+            }
+
+            assertSame(expected, thrown)
+            assertEquals(0, activeBitmaps)
+        }
+    }
+
+    @Test
+    fun localBitmapReleaseFailureIsSuppressedOnPrimaryFailure() {
+        val primary = IllegalStateException("mismatch")
+        val releaseFailure = IllegalArgumentException("release")
+
+        val thrown = assertFailsWith<IllegalStateException> {
+            handoffLocalPlatformImageBitmap(
+                createBitmap = { ImageBitmap(width = 3, height = 2) },
+                releaseBitmap = { throw releaseFailure },
+            ) {
+                throw primary
+            }
+        }
+
+        assertSame(primary, thrown)
+        assertEquals(listOf(releaseFailure), thrown.suppressedExceptions)
+    }
+
+    @Test
+    fun localBitmapSuccessfulHandoffDoesNotReleasePixels() {
+        val bitmap = ImageBitmap(width = 3, height = 2)
+        var releaseCount = 0
+
+        val result = handoffLocalPlatformImageBitmap(
+            createBitmap = { bitmap },
+            releaseBitmap = { releaseCount += 1 },
+        ) { it }
+
+        assertSame(bitmap, result)
+        assertEquals(0, releaseCount)
+    }
 
     @Test
     fun pngRoundTripPreservesDimensions() = runBlocking {

@@ -100,17 +100,20 @@ class IosPlatformImageCodec : PlatformImageCodec {
                     )
                     try {
                         currentCoroutineContext().ensureActive()
-                        val bitmap = thumbnail.toImageBitmap()
-                        if (
-                            bitmap.width > request.maxDimension ||
-                            bitmap.height > request.maxDimension ||
-                            bitmap.width.toLong() * bitmap.height > request.maxPixels
-                        ) {
-                            throw IllegalStateException(
-                                "ImageIO thumbnail ${bitmap.width}x${bitmap.height} exceeds $request",
-                            )
+                        handoffLocalPlatformImageBitmap(
+                            createBitmap = { thumbnail.toImageBitmap() },
+                        ) { bitmap ->
+                            if (
+                                bitmap.width > request.maxDimension ||
+                                bitmap.height > request.maxDimension ||
+                                bitmap.width.toLong() * bitmap.height > request.maxPixels
+                            ) {
+                                throw IllegalStateException(
+                                    "ImageIO thumbnail ${bitmap.width}x${bitmap.height} exceeds $request",
+                                )
+                            }
+                            DecodedImage(bitmap = bitmap, originalSize = metadata.orientedSize)
                         }
-                        DecodedImage(bitmap = bitmap, originalSize = metadata.orientedSize)
                     } finally {
                         CGImageRelease(thumbnail)
                     }
@@ -384,12 +387,17 @@ class IosPlatformImageCodec : PlatformImageCodec {
             UIGraphicsEndImageContext()
         }
         currentCoroutineContext().ensureActive()
-        val bitmap = UIImagePNGRepresentation(output)
-            ?.toByteArray()
-            ?.decodeToImageBitmap()
-            ?: throw IllegalStateException("Unable to encode fixed output image")
-        check(bitmap.width == request.outputSize.width && bitmap.height == request.outputSize.height)
-        return bitmap
+        return handoffLocalPlatformImageBitmap(
+            createBitmap = {
+                UIImagePNGRepresentation(output)
+                    ?.toByteArray()
+                    ?.decodeToImageBitmap()
+                    ?: throw IllegalStateException("Unable to encode fixed output image")
+            },
+        ) { bitmap ->
+            check(bitmap.width == request.outputSize.width && bitmap.height == request.outputSize.height)
+            bitmap
+        }
     }
 
     private fun CGImageRef.toImageBitmap(): ImageBitmap {
@@ -398,8 +406,11 @@ class IosPlatformImageCodec : PlatformImageCodec {
         val png = UIImagePNGRepresentation(UIImage.imageWithCGImage(this))
             ?.toByteArray()
             ?: throw IllegalStateException("Unable to encode bounded CGImage")
-        return png.decodeToImageBitmap().also { bitmap ->
+        return handoffLocalPlatformImageBitmap(
+            createBitmap = png::decodeToImageBitmap,
+        ) { bitmap ->
             check(bitmap.width == expectedWidth && bitmap.height == expectedHeight)
+            bitmap
         }
     }
 

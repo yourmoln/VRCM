@@ -8,9 +8,33 @@ import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNull
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class BoundedSourceReaderTest {
+    @Test
+    fun declaredSizeReadFallsBackOnlyForRecoverableExceptions() {
+        assertEquals(42L, readDeclaredFileSize { 42L })
+        assertNull(readDeclaredFileSize { throw IllegalStateException("size unavailable") })
+    }
+
+    @Test
+    fun declaredSizeReadPreservesCancellationAndFatalIdentity() {
+        val cancellation = CancellationException("cancelled")
+        val fatal = AssertionError("fatal")
+
+        val cancellationThrown = assertFailsWith<CancellationException> {
+            readDeclaredFileSize { throw cancellation }
+        }
+        val fatalThrown = assertFailsWith<AssertionError> {
+            readDeclaredFileSize { throw fatal }
+        }
+
+        assertSame(cancellation, cancellationThrown)
+        assertSame(fatal, fatalThrown)
+    }
+
     @Test
     fun readsContentAtTheLimit() {
         val source = RecordingSource(totalBytes = 4)

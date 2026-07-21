@@ -56,7 +56,6 @@ import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageFai
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageLimits
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.handoffPreparedImageToEditor
-import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.localizedMessage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.readBoundedBytes
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
@@ -148,13 +147,9 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 coroutineScope.launch {
                     isPreparing = true
                     try {
-                        val source = runCatching {
-                            SelectedImage(
-                                fileName = image.name,
-                                bytes = image.readBoundedBytes(PrintImageLimits.MAX_FILE_BYTES),
-                            )
+                        val source = readSelectedImage(image.name) {
+                            image.readBoundedBytes(PrintImageLimits.MAX_FILE_BYTES)
                         }.getOrElse {
-                            if (it is CancellationException) throw it
                             val message = if (it is PrintImageFailure.FileTooLarge) {
                                 locale.printEditorFileTooLarge
                             } else {

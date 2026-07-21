@@ -3,6 +3,7 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 import io.github.vinceglb.filekit.PlatformFile
 import io.github.vinceglb.filekit.size
 import io.github.vinceglb.filekit.source
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.IO
 import kotlinx.coroutines.currentCoroutineContext
@@ -16,12 +17,20 @@ internal suspend fun PlatformFile.readBoundedBytes(maxBytes: Long): ByteArray =
     withContext(Dispatchers.IO) {
         val coroutineContext = currentCoroutineContext()
         readBoundedBytes(
-            declaredSize = runCatching { size() }.getOrNull(),
+            declaredSize = readDeclaredFileSize { size() },
             maxBytes = maxBytes,
             openSource = { source() },
             ensureActive = { coroutineContext.ensureActive() },
         )
     }
+
+internal inline fun readDeclaredFileSize(readSize: () -> Long): Long? = try {
+    readSize()
+} catch (cause: CancellationException) {
+    throw cause
+} catch (_: Exception) {
+    null
+}
 
 internal fun readBoundedBytes(
     declaredSize: Long?,

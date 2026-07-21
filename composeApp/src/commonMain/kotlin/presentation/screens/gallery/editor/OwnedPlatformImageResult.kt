@@ -5,6 +5,26 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.withContext
 
+internal inline fun <T> handoffLocalPlatformImageBitmap(
+    createBitmap: () -> ImageBitmap,
+    noinline releaseBitmap: (ImageBitmap) -> Unit = ::releasePlatformImageBitmap,
+    block: (ImageBitmap) -> T,
+): T {
+    val bitmap = createBitmap()
+    return try {
+        block(bitmap)
+    } catch (cause: CancellationException) {
+        releaseAfterOwnedResultFailure(bitmap, cause, releaseBitmap)
+        throw cause
+    } catch (cause: Exception) {
+        releaseAfterOwnedResultFailure(bitmap, cause, releaseBitmap)
+        throw cause
+    } catch (cause: Error) {
+        releaseAfterOwnedResultFailure(bitmap, cause, releaseBitmap)
+        throw cause
+    }
+}
+
 internal suspend fun <T> withOwnedPlatformImageResult(
     dispatcher: CoroutineDispatcher,
     ownedBitmap: (T) -> ImageBitmap,
