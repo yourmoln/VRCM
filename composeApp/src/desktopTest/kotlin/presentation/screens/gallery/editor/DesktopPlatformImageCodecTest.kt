@@ -1,7 +1,9 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asComposeImageBitmap
 import androidx.compose.ui.graphics.asSkiaBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Color
@@ -33,6 +35,16 @@ class DesktopPlatformImageCodecTest {
         assertEquals(
             DesktopRasterStrategy.REJECT_UNSAFE_SOURCE,
             planDesktopPreviewRaster(source, target),
+        )
+    }
+
+    @Test
+    fun previewStrategyRejectsUnsafeExactSizeDecode() {
+        val source = ImageSize(10_000, 10_000)
+
+        assertEquals(
+            DesktopRasterStrategy.REJECT_UNSAFE_SOURCE,
+            planDesktopPreviewRaster(source, source),
         )
     }
 
@@ -100,6 +112,46 @@ class DesktopPlatformImageCodecTest {
             }
 
             assertSame(fatal, thrown)
+        }
+    }
+
+    @Test
+    fun cancelledImageBitmapHandoffClosesOwnedPixels() {
+        val cancellation = CancellationException("cancelled")
+        val previousEnabled = Stats.enabled
+        Stats.enabled = true
+        Stats.allocated.clear()
+        try {
+            val bitmap = createOwnedImageBitmap()
+
+            val thrown = assertFailsWith<CancellationException> {
+                handoffDesktopImageBitmap(bitmap) { throw cancellation }
+            }
+
+            assertSame(cancellation, thrown)
+            assertEquals(0, Stats.allocated["Bitmap"] ?: 0)
+        } finally {
+            Stats.allocated.clear()
+            Stats.enabled = previousEnabled
+        }
+    }
+
+    @Test
+    fun successfulImageBitmapHandoffKeepsOwnedPixelsOpen() {
+        val previousEnabled = Stats.enabled
+        Stats.enabled = true
+        Stats.allocated.clear()
+        try {
+            val bitmap = createOwnedImageBitmap()
+
+            assertSame(bitmap, handoffDesktopImageBitmap(bitmap) {})
+            assertEquals(1, Stats.allocated["Bitmap"] ?: 0)
+
+            bitmap.asSkiaBitmap().close()
+            assertEquals(0, Stats.allocated["Bitmap"] ?: 0)
+        } finally {
+            Stats.allocated.clear()
+            Stats.enabled = previousEnabled
         }
     }
 
@@ -335,6 +387,13 @@ private fun createEncodedImage(
     height: Int,
     format: EncodedImageFormat,
 ): ByteArray = createEncodedImage(ImageSize(width, height), format)
+
+private fun createOwnedImageBitmap(): ImageBitmap =
+    Surface.makeRasterN32Premul(2, 2).use { surface ->
+        surface.makeImageSnapshot().use { image ->
+            Bitmap.makeFromImage(image).asComposeImageBitmap()
+        }
+    }
 
 private fun createEncodedImage(
     size: ImageSize,

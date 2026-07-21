@@ -54,6 +54,7 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
                                     ),
                                 ) { "Unable to allocate bounded preview bitmap" }
                                 codec.readPixels(decoded)
+                                coroutineContext.ensureActive()
                                 orientPreview(decoded, metadata.origin, target)
                             }
                         }
@@ -69,17 +70,20 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
                         originalSize = metadata.orientedSize,
                     )
                 }
-                currentCoroutineContext().ensureActive()
-                result
+                result.copy(
+                    bitmap = handoffDesktopImageBitmap(result.bitmap) {
+                        coroutineContext.ensureActive()
+                    },
+                )
             }
         }
 
     suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
         withContext(Dispatchers.Default) {
             mapDesktopImageFailure(DesktopFailureOperation.RENDER) {
-                currentCoroutineContext().ensureActive()
+                val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
                 val metadata = withCodec(bytes) { _, metadata -> metadata }
-                currentCoroutineContext().ensureActive()
+                coroutineContext.ensureActive()
                 if (metadata.orientedSize != request.originalSize) {
                     throw PrintImageFailure.RenderFailed(
                         IllegalArgumentException(
@@ -96,8 +100,8 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
                     )
                 }
                 val plan = CropRenderPlanner().plan(request)
-                renderEncodedCrop(bytes, metadata, plan).also {
-                    currentCoroutineContext().ensureActive()
+                handoffDesktopImageBitmap(renderEncodedCrop(bytes, metadata, plan)) {
+                    coroutineContext.ensureActive()
                 }
             }
         }
@@ -320,6 +324,17 @@ private fun AffineTransform.toSkiaMatrix(): Matrix33 = Matrix33(
 private fun Image.toOwnedComposeImageBitmap(): ImageBitmap =
     Bitmap.makeFromImage(this).asComposeImageBitmap()
 
+internal inline fun handoffDesktopImageBitmap(
+    bitmap: ImageBitmap,
+    checkCancellation: () -> Unit,
+): ImageBitmap = try {
+    checkCancellation()
+    bitmap
+} catch (cause: CancellationException) {
+    bitmap.asSkiaBitmap().close()
+    throw cause
+}
+
 internal enum class DesktopRasterStrategy {
     DIRECT_CODEC,
     BOUNDED_ENCODED_IMAGE,
@@ -330,10 +345,10 @@ internal fun planDesktopPreviewRaster(
     source: ImageSize,
     target: ImageSize,
 ): DesktopRasterStrategy = when {
+    source.pixelCount() > PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS ->
+        DesktopRasterStrategy.REJECT_UNSAFE_SOURCE
     source == target -> DesktopRasterStrategy.DIRECT_CODEC
-    source.pixelCount() <= PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS ->
-        DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE
-    else -> DesktopRasterStrategy.REJECT_UNSAFE_SOURCE
+    else -> DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE
 }
 
 internal fun planDesktopCropRaster(source: ImageSize): DesktopRasterStrategy =
