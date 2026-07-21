@@ -104,6 +104,7 @@ class IosPlatformImageCodec : PlatformImageCodec {
                         conservativeThumbnailLongest(metadata.orientedSize, plannedSize, request),
                     )
                     try {
+                        currentCoroutineContext().ensureActive()
                         val bitmap = thumbnail.toImageBitmap()
                         if (
                             bitmap.width > request.maxDimension ||
