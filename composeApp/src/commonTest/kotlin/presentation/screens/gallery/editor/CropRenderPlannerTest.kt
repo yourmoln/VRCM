@@ -1,5 +1,7 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 
+import kotlin.math.ceil
+import kotlin.math.floor
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -88,6 +90,12 @@ class CropRenderPlannerTest {
         val geometry = calculator.geometry(source, output, transform)
 
         val plan = planner.plan(CropRenderRequest(source, transform, output))
+        val expectedBounds = visibleSourceBoundsLikePreview(
+            source = source,
+            output = output,
+            transform = transform,
+            geometry = geometry,
+        )
 
         assertPointEquals(
             expected = FloatPoint(
@@ -96,6 +104,8 @@ class CropRenderPlannerTest {
             ),
             actual = plan.sourceToOutput.map(source.width / 2f, source.height / 2f),
         )
+        assertEquals(PixelRect(1_390, 333, 2_329, 2_001), expectedBounds)
+        assertEquals(expectedBounds, plan.visibleSourceBounds)
         assertInsideSource(plan.visibleSourceBounds, source)
     }
 
@@ -133,24 +143,39 @@ class CropRenderPlannerTest {
     fun extremeLegalPanIsClampedToNonEmptyInBoundsRegion() {
         val source = ImageSize(6_000, 4_000)
         val output = ImageSize(1_920, 1_080)
+        val transform = CropTransform(
+            centerOffsetX = Float.MAX_VALUE,
+            centerOffsetY = -Float.MAX_VALUE,
+            zoom = 2.5f,
+            quarterTurns = 1,
+            flipVertical = true,
+        )
+        val geometry = calculator.geometry(source, output, transform)
+        val maxTranslationX = (geometry.imageWidth - output.width) / 2f
+        val maxTranslationY = (geometry.imageHeight - output.height) / 2f
 
-        val bounds = planner.plan(
-            CropRenderRequest(
-                originalSize = source,
-                transform = CropTransform(
-                    centerOffsetX = Float.MAX_VALUE,
-                    centerOffsetY = -Float.MAX_VALUE,
-                    zoom = 2.5f,
-                    quarterTurns = 1,
-                    flipVertical = true,
-                ),
-                outputSize = output,
+        val plan = planner.plan(CropRenderRequest(source, transform, output))
+        val expectedBounds = visibleSourceBoundsLikePreview(
+            source = source,
+            output = output,
+            transform = transform,
+            geometry = geometry,
+        )
+
+        assertEquals(maxTranslationX, geometry.translationX, 0.01f)
+        assertEquals(-maxTranslationY, geometry.translationY, 0.01f)
+        assertPointEquals(
+            expected = FloatPoint(
+                x = output.width / 2f + geometry.translationX,
+                y = output.height / 2f + geometry.translationY,
             ),
-        ).visibleSourceBounds
-
-        assertInsideSource(bounds, source)
-        assertTrue(bounds.width > 0)
-        assertTrue(bounds.height > 0)
+            actual = plan.sourceToOutput.map(source.width / 2f, source.height / 2f),
+        )
+        assertEquals(PixelRect(5_100, 0, 6_000, 1_600), expectedBounds)
+        assertEquals(expectedBounds, plan.visibleSourceBounds)
+        assertInsideSource(plan.visibleSourceBounds, source)
+        assertTrue(plan.visibleSourceBounds.width > 0)
+        assertTrue(plan.visibleSourceBounds.height > 0)
     }
 
     private fun mapLikePreview(
@@ -174,6 +199,76 @@ class CropRenderPlannerTest {
         return FloatPoint(
             x = output.width / 2f + geometry.translationX + rotated.x,
             y = output.height / 2f + geometry.translationY + rotated.y,
+        )
+    }
+
+    private fun visibleSourceBoundsLikePreview(
+        source: ImageSize,
+        output: ImageSize,
+        transform: CropTransform,
+        geometry: RenderGeometry,
+    ): PixelRect {
+        val previewTransform = affineLikePreview(source, output, transform, geometry)
+        val sourceCorners = listOf(
+            FloatPoint(0f, 0f),
+            FloatPoint(output.width.toFloat(), 0f),
+            FloatPoint(0f, output.height.toFloat()),
+            FloatPoint(output.width.toFloat(), output.height.toFloat()),
+        ).map { point ->
+            mapOutputToSourceLikePreview(point, previewTransform)
+        }
+        return PixelRect(
+            left = floor(sourceCorners.minOf { it.x }).toInt().coerceIn(0, source.width),
+            top = floor(sourceCorners.minOf { it.y }).toInt().coerceIn(0, source.height),
+            right = ceil(sourceCorners.maxOf { it.x }).toInt().coerceIn(0, source.width),
+            bottom = ceil(sourceCorners.maxOf { it.y }).toInt().coerceIn(0, source.height),
+        )
+    }
+
+    private fun affineLikePreview(
+        source: ImageSize,
+        output: ImageSize,
+        transform: CropTransform,
+        geometry: RenderGeometry,
+    ): AffineTransform {
+        val origin = mapLikePreview(FloatPoint(0f, 0f), source, output, transform, geometry)
+        val right = mapLikePreview(
+            FloatPoint(source.width.toFloat(), 0f),
+            source,
+            output,
+            transform,
+            geometry,
+        )
+        val bottom = mapLikePreview(
+            FloatPoint(0f, source.height.toFloat()),
+            source,
+            output,
+            transform,
+            geometry,
+        )
+        return AffineTransform(
+            scaleX = (right.x - origin.x) / source.width,
+            skewX = (bottom.x - origin.x) / source.height,
+            translateX = origin.x,
+            skewY = (right.y - origin.y) / source.width,
+            scaleY = (bottom.y - origin.y) / source.height,
+            translateY = origin.y,
+        )
+    }
+
+    private fun mapOutputToSourceLikePreview(
+        point: FloatPoint,
+        previewTransform: AffineTransform,
+    ): FloatPoint {
+        val translatedX = point.x - previewTransform.translateX
+        val translatedY = point.y - previewTransform.translateY
+        val determinant = previewTransform.scaleX * previewTransform.scaleY -
+                previewTransform.skewX * previewTransform.skewY
+        return FloatPoint(
+            x = (previewTransform.scaleY * translatedX -
+                    previewTransform.skewX * translatedY) / determinant,
+            y = (-previewTransform.skewY * translatedX +
+                    previewTransform.scaleX * translatedY) / determinant,
         )
     }
 
