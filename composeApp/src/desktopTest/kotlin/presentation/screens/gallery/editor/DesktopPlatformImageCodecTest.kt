@@ -260,28 +260,49 @@ class DesktopPlatformImageCodecTest {
     }
 
     @Test
-    fun exifSixDecodeAndCropNormalizePixelDirection() = runBlocking {
+    fun exifOrientationsNormalizePreviewDimensionsAndPixels() = runBlocking {
+        val rawSize = EXIF_ORIENTATION_FIXTURE_SIZE
+        val rawJpeg = createFourColorImage(rawSize, EncodedImageFormat.JPEG)
+
+        EXIF_ORIENTATION_CONTRACTS.forEach { contract ->
+            val decoded = codec.decode(
+                rawJpeg.withExifOrientation(contract.orientation),
+                DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L),
+            )
+            val preview = decoded.bitmap.asSkiaBitmap()
+            val expectedSize = contract.orientedSize(rawSize)
+
+            try {
+                assertEquals(expectedSize, decoded.originalSize, "orientation=${contract.orientation}")
+                assertEquals(expectedSize.width, preview.width, "orientation=${contract.orientation}")
+                assertEquals(expectedSize.height, preview.height, "orientation=${contract.orientation}")
+                contract.expectedCorners.forEach { expected ->
+                    val (x, y) = expected.corner.samplePoint(expectedSize)
+                    val actual = preview.getColor(x, y)
+                    assertExifColorNear(
+                        expected = expected.color,
+                        actualRed = Color.getR(actual),
+                        actualGreen = Color.getG(actual),
+                        actualBlue = Color.getB(actual),
+                        context = "orientation=${contract.orientation}, corner=${expected.corner}",
+                    )
+                }
+            } finally {
+                preview.close()
+            }
+        }
+    }
+
+    @Test
+    fun exifSixCropNormalizesPixelDirection() = runBlocking {
         val rawSize = ImageSize(400, 300)
         val orientedSize = ImageSize(300, 400)
         val jpeg = createFourColorImage(rawSize, EncodedImageFormat.JPEG).withExifOrientation(6)
-
-        val decoded = codec.decode(
-            jpeg,
-            DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L),
-        )
-        val preview = decoded.bitmap.asSkiaBitmap()
         val rendered = codec.renderCrop(
             jpeg,
             CropRenderRequest(orientedSize, CropTransform(), ImageSize(150, 200)),
         ).asSkiaBitmap()
 
-        assertEquals(orientedSize, decoded.originalSize)
-        assertEquals(orientedSize.width, preview.width)
-        assertEquals(orientedSize.height, preview.height)
-        assertColorNear(Color.BLUE, preview.getColor(25, 25), tolerance = 35)
-        assertColorNear(Color.RED, preview.getColor(274, 25), tolerance = 35)
-        assertColorNear(Color.YELLOW, preview.getColor(25, 374), tolerance = 35)
-        assertColorNear(Color.GREEN, preview.getColor(274, 374), tolerance = 35)
         assertColorNear(Color.BLUE, rendered.getColor(20, 20), tolerance = 35)
         assertColorNear(Color.RED, rendered.getColor(129, 20), tolerance = 35)
         assertColorNear(Color.YELLOW, rendered.getColor(20, 179), tolerance = 35)
@@ -550,21 +571,6 @@ private fun assertColorNear(expected: Int, actual: Int, tolerance: Int) {
         abs(Color.getB(expected) - Color.getB(actual)) <= tolerance,
         "blue: expected=${Color.getB(expected)}, actual=${Color.getB(actual)}, color=$actual",
     )
-}
-
-private fun ByteArray.withExifOrientation(orientation: Int): ByteArray {
-    require(size >= 2 && this[0] == 0xFF.toByte() && this[1] == 0xD8.toByte())
-    val exifSegment = byteArrayOf(
-        0xFF.toByte(), 0xE1.toByte(), 0x00, 0x22,
-        0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
-        0x49, 0x49, 0x2A, 0x00,
-        0x08, 0x00, 0x00, 0x00,
-        0x01, 0x00,
-        0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00,
-        orientation.toByte(), 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-    )
-    return copyOfRange(0, 2) + exifSegment + copyOfRange(2, size)
 }
 
 private fun ByteArray.hasPngSignature(): Boolean {

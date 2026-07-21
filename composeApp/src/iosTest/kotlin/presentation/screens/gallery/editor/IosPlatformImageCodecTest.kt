@@ -138,17 +138,37 @@ class IosPlatformImageCodecTest {
     }
 
     @Test
-    fun exifOrientationSixIsNormalized() = runBlocking {
-        val jpeg = createEncodedImage(12, 7, EncodedImageFormat.JPEG).withExifOrientation(6)
+    fun exifOrientationsNormalizePreviewDimensionsAndPixels() = runBlocking {
+        val rawSize = EXIF_ORIENTATION_FIXTURE_SIZE
+        val rawJpeg = createFourColorImage(rawSize, EncodedImageFormat.JPEG)
 
-        val decoded = codec.decode(
-            jpeg,
-            DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L),
-        )
+        EXIF_ORIENTATION_CONTRACTS.forEach { contract ->
+            val decoded = codec.decode(
+                rawJpeg.withExifOrientation(contract.orientation),
+                DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L),
+            )
+            val bitmap = decoded.bitmap.asSkiaBitmap()
+            val expectedSize = contract.orientedSize(rawSize)
 
-        assertEquals(ImageSize(7, 12), decoded.originalSize)
-        assertEquals(7, decoded.bitmap.width)
-        assertEquals(12, decoded.bitmap.height)
+            try {
+                assertEquals(expectedSize, decoded.originalSize, "orientation=${contract.orientation}")
+                assertEquals(expectedSize.width, bitmap.width, "orientation=${contract.orientation}")
+                assertEquals(expectedSize.height, bitmap.height, "orientation=${contract.orientation}")
+                contract.expectedCorners.forEach { expected ->
+                    val (x, y) = expected.corner.samplePoint(expectedSize)
+                    val actual = bitmap.getColor(x, y)
+                    assertExifColorNear(
+                        expected = expected.color,
+                        actualRed = Color.getR(actual),
+                        actualGreen = Color.getG(actual),
+                        actualBlue = Color.getB(actual),
+                        context = "orientation=${contract.orientation}, corner=${expected.corner}",
+                    )
+                }
+            } finally {
+                bitmap.close()
+            }
+        }
     }
 
     @Test
@@ -574,20 +594,6 @@ private fun assertColorNear(expected: Int, actual: Int, tolerance: Int) {
         abs(Color.getB(expected) - Color.getB(actual)) <= tolerance,
         "blue: expected=${Color.getB(expected)}, actual=${Color.getB(actual)}, color=$actual",
     )
-}
-
-private fun ByteArray.withExifOrientation(orientation: Int): ByteArray {
-    val segment = byteArrayOf(
-        0xFF.toByte(), 0xE1.toByte(), 0x00, 0x22,
-        0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
-        0x49, 0x49, 0x2A, 0x00,
-        0x08, 0x00, 0x00, 0x00,
-        0x01, 0x00,
-        0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00,
-        orientation.toByte(), 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-    )
-    return copyOfRange(0, 2) + segment + copyOfRange(2, size)
 }
 
 private fun ByteArray.hasPngSignature(): Boolean {

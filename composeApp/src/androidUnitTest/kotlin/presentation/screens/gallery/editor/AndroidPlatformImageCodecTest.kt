@@ -140,18 +140,39 @@ class AndroidPlatformImageCodecTest {
     }
 
     @Test
-    fun exifOrientationSixIsNormalized() = runBlocking {
-        val jpeg = createEncodedBitmap(12, 7, Bitmap.CompressFormat.JPEG).withExifOrientation(6)
-        assertDecodableBounds(jpeg, "image/jpeg")
+    fun exifOrientationsNormalizePreviewDimensionsAndPixels() = runBlocking {
+        val rawSize = EXIF_ORIENTATION_FIXTURE_SIZE
+        val rawJpeg = createFourColorJpeg(rawSize)
 
-        val decoded = codec.decode(
-            jpeg,
-            DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L),
-        )
+        EXIF_ORIENTATION_CONTRACTS.forEach { contract ->
+            val jpeg = rawJpeg.withExifOrientation(contract.orientation)
+            assertDecodableBounds(jpeg, "image/jpeg")
+            val decoded = codec.decode(
+                jpeg,
+                DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L),
+            )
+            val bitmap = decoded.bitmap.asAndroidBitmap()
+            val expectedSize = contract.orientedSize(rawSize)
 
-        assertEquals(ImageSize(7, 12), decoded.originalSize)
-        assertEquals(7, decoded.bitmap.asAndroidBitmap().width)
-        assertEquals(12, decoded.bitmap.asAndroidBitmap().height)
+            try {
+                assertEquals(expectedSize, decoded.originalSize, "orientation=${contract.orientation}")
+                assertEquals(expectedSize.width, bitmap.width, "orientation=${contract.orientation}")
+                assertEquals(expectedSize.height, bitmap.height, "orientation=${contract.orientation}")
+                contract.expectedCorners.forEach { expected ->
+                    val (x, y) = expected.corner.samplePoint(expectedSize)
+                    val actual = bitmap.getPixel(x, y)
+                    assertExifColorNear(
+                        expected = expected.color,
+                        actualRed = Color.red(actual),
+                        actualGreen = Color.green(actual),
+                        actualBlue = Color.blue(actual),
+                        context = "orientation=${contract.orientation}, corner=${expected.corner}",
+                    )
+                }
+            } finally {
+                bitmap.recycle()
+            }
+        }
     }
 
     @Test
@@ -434,12 +455,7 @@ private fun createFourColorJpeg(size: ImageSize): ByteArray = createEncodedPixel
     size,
     Bitmap.CompressFormat.JPEG,
 ) { x, y ->
-    when {
-        x < size.width / 2 && y < size.height / 2 -> Color.RED
-        x >= size.width / 2 && y < size.height / 2 -> Color.GREEN
-        x < size.width / 2 -> Color.BLUE
-        else -> Color.YELLOW
-    }
+    exifFixtureColorAt(x, y, size).let { Color.rgb(it.red, it.green, it.blue) }
 }
 
 private fun createStripedPng(size: ImageSize): ByteArray = createPng(size) { x, _ ->
@@ -573,20 +589,6 @@ private data class StripeStats(
     val transitions: Int,
     val range: IntRange,
 )
-
-private fun ByteArray.withExifOrientation(orientation: Int): ByteArray {
-    val segment = byteArrayOf(
-        0xFF.toByte(), 0xE1.toByte(), 0x00, 0x22,
-        0x45, 0x78, 0x69, 0x66, 0x00, 0x00,
-        0x49, 0x49, 0x2A, 0x00,
-        0x08, 0x00, 0x00, 0x00,
-        0x01, 0x00,
-        0x12, 0x01, 0x03, 0x00, 0x01, 0x00, 0x00, 0x00,
-        orientation.toByte(), 0x00, 0x00, 0x00,
-        0x00, 0x00, 0x00, 0x00,
-    )
-    return copyOfRange(0, 2) + segment + copyOfRange(2, size)
-}
 
 private fun ByteArray.hasPngSignature(): Boolean {
     val signature = byteArrayOf(
