@@ -21,6 +21,47 @@ data class CropTransform(
     val flipVertical: Boolean = false,
 )
 
+data class CropRenderRequest(
+    val originalSize: ImageSize,
+    val transform: CropTransform,
+    val outputSize: ImageSize,
+)
+
+data class FloatPoint(
+    val x: Float,
+    val y: Float,
+)
+
+data class AffineTransform(
+    val scaleX: Float,
+    val skewX: Float,
+    val translateX: Float,
+    val skewY: Float,
+    val scaleY: Float,
+    val translateY: Float,
+) {
+    fun map(x: Float, y: Float): FloatPoint = FloatPoint(
+        x = scaleX * x + skewX * y + translateX,
+        y = skewY * x + scaleY * y + translateY,
+    )
+}
+
+data class PixelRect(
+    val left: Int,
+    val top: Int,
+    val right: Int,
+    val bottom: Int,
+) {
+    val width: Int get() = right - left
+    val height: Int get() = bottom - top
+}
+
+data class CropRenderPlan(
+    val sourceToOutput: AffineTransform,
+    val visibleSourceBounds: PixelRect,
+    val outputSize: ImageSize,
+)
+
 data class RenderGeometry(
     val imageWidth: Float,
     val imageHeight: Float,
