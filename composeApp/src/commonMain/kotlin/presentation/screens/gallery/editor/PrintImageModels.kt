@@ -27,20 +27,20 @@ data class CropRenderRequest(
     val outputSize: ImageSize,
 )
 
-data class FloatPoint(
-    val x: Float,
-    val y: Float,
+data class AffinePoint(
+    val x: Double,
+    val y: Double,
 )
 
 data class AffineTransform(
-    val scaleX: Float,
-    val skewX: Float,
-    val translateX: Float,
-    val skewY: Float,
-    val scaleY: Float,
-    val translateY: Float,
+    val scaleX: Double,
+    val skewX: Double,
+    val translateX: Double,
+    val skewY: Double,
+    val scaleY: Double,
+    val translateY: Double,
 ) {
-    fun map(x: Float, y: Float): FloatPoint = FloatPoint(
+    fun map(x: Double, y: Double): AffinePoint = AffinePoint(
         x = scaleX * x + skewX * y + translateX,
         y = skewY * x + scaleY * y + translateY,
     )

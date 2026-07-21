@@ -21,7 +21,7 @@ class CropRenderPlannerTest {
             ),
         )
 
-        assertPointEquals(FloatPoint(960f, 540f), plan.sourceToOutput.map(1_200f, 540f))
+        assertPointEquals(AffinePoint(960.0, 540.0), plan.sourceToOutput.map(1_200.0, 540.0))
         assertEquals(PixelRect(240, 0, 2_160, 1_080), plan.visibleSourceBounds)
         assertEquals(ImageSize(1_920, 1_080), plan.outputSize)
     }
@@ -98,11 +98,11 @@ class CropRenderPlannerTest {
         )
 
         assertPointEquals(
-            expected = FloatPoint(
-                x = output.width / 2f + geometry.translationX,
-                y = output.height / 2f + geometry.translationY,
+            expected = AffinePoint(
+                x = output.width / 2.0 + geometry.translationX.toDouble(),
+                y = output.height / 2.0 + geometry.translationY.toDouble(),
             ),
-            actual = plan.sourceToOutput.map(source.width / 2f, source.height / 2f),
+            actual = plan.sourceToOutput.map(source.width / 2.0, source.height / 2.0),
         )
         assertEquals(PixelRect(1_390, 333, 2_329, 2_000), expectedBounds)
         assertEquals(expectedBounds, plan.visibleSourceBounds)
@@ -124,11 +124,11 @@ class CropRenderPlannerTest {
         val geometry = calculator.geometry(source, output, transform)
         val plan = planner.plan(CropRenderRequest(source, transform, output))
         val points = listOf(
-            FloatPoint(0f, 0f),
-            FloatPoint(source.width.toFloat(), 0f),
-            FloatPoint(0f, source.height.toFloat()),
-            FloatPoint(source.width.toFloat(), source.height.toFloat()),
-            FloatPoint(source.width / 2f, source.height / 2f),
+            AffinePoint(0.0, 0.0),
+            AffinePoint(source.width.toDouble(), 0.0),
+            AffinePoint(0.0, source.height.toDouble()),
+            AffinePoint(source.width.toDouble(), source.height.toDouble()),
+            AffinePoint(source.width / 2.0, source.height / 2.0),
         )
 
         points.forEach { point ->
@@ -164,13 +164,13 @@ class CropRenderPlannerTest {
         assertEquals(maxTranslationX, geometry.translationX, 0.01f)
         assertEquals(-maxTranslationY, geometry.translationY, 0.01f)
         assertPointEquals(
-            expected = FloatPoint(
-                x = output.width / 2f + geometry.translationX,
-                y = output.height / 2f + geometry.translationY,
+            expected = AffinePoint(
+                x = output.width / 2.0 + geometry.translationX.toDouble(),
+                y = output.height / 2.0 + geometry.translationY.toDouble(),
             ),
-            actual = plan.sourceToOutput.map(source.width / 2f, source.height / 2f),
+            actual = plan.sourceToOutput.map(source.width / 2.0, source.height / 2.0),
         )
-        assertEquals(PixelRect(5_099, 0, 6_000, 1_600), expectedBounds)
+        assertEquals(PixelRect(5_100, 0, 6_000, 1_600), expectedBounds)
         assertEquals(expectedBounds, plan.visibleSourceBounds)
         assertInsideSource(plan.visibleSourceBounds, source)
         assertTrue(plan.visibleSourceBounds.width > 0)
@@ -189,12 +189,12 @@ class CropRenderPlannerTest {
             ),
         )
 
-        assertEquals(PixelRect(1_875, 0, 4_126, 4_000), plan.visibleSourceBounds)
+        assertEquals(PixelRect(1_875, 0, 4_125, 4_000), plan.visibleSourceBounds)
         val exclusiveRightCorner = inverseUsingDouble(
             plan.sourceToOutput,
-            DoublePoint(0.0, output.height.toDouble()),
+            AffinePoint(0.0, output.height.toDouble()),
         )
-        assertTrue(exclusiveRightCorner.x > 4_125.0)
+        assertEquals(4_125.0, exclusiveRightCorner.x, 0.000_001)
         assertTrue(exclusiveRightCorner.x <= plan.visibleSourceBounds.right)
         assertOutputSamplesCoveredByBounds(plan, source, output)
     }
@@ -203,8 +203,17 @@ class CropRenderPlannerTest {
     fun maximumLegalPixelCountKeepsDoubleInverseCornersCovered() {
         val source = ImageSize(100_000_000, 1)
         val output = ImageSize(1_920, 1_080)
+        val geometry = calculator.geometry(source, output, CropTransform())
         val plan = planner.plan(CropRenderRequest(source, CropTransform(), output))
 
+        assertPointEquals(
+            expected = AffinePoint(
+                x = output.width / 2.0 + geometry.translationX.toDouble(),
+                y = output.height / 2.0 + geometry.translationY.toDouble(),
+            ),
+            actual = plan.sourceToOutput.map(source.width / 2.0, source.height / 2.0),
+            tolerance = 0.000_001,
+        )
         assertEquals(
             visibleSourceBoundsFromReturnedAffine(plan.sourceToOutput, source, output),
             plan.visibleSourceBounds,
@@ -262,33 +271,43 @@ class CropRenderPlannerTest {
         val geometry = calculator.geometry(source, output, transform)
         val plan = planner.plan(CropRenderRequest(source, transform, output))
         val roundedPreviewCenter = mapCenterLikeRoundedPreview(output, transform, geometry)
-        val affineCenter = plan.sourceToOutput.map(source.width / 2f, source.height / 2f)
+        val affineCenter = plan.sourceToOutput.map(source.width / 2.0, source.height / 2.0)
 
         assertEquals(roundedPreviewCenter.x, affineCenter.x, PREVIEW_ROUNDING_TOLERANCE)
         assertEquals(roundedPreviewCenter.y, affineCenter.y, PREVIEW_ROUNDING_TOLERANCE)
     }
 
     private fun mapLikePreview(
-        point: FloatPoint,
+        point: AffinePoint,
         source: ImageSize,
         output: ImageSize,
         transform: CropTransform,
         geometry: RenderGeometry,
-    ): FloatPoint {
+    ): AffinePoint {
         val turns = ((transform.quarterTurns % 4) + 4) % 4
-        val unrotatedWidth = if (turns % 2 == 0) geometry.imageWidth else geometry.imageHeight
-        val unrotatedHeight = if (turns % 2 == 0) geometry.imageHeight else geometry.imageWidth
-        val flippedX = (point.x / source.width - 0.5f) * unrotatedWidth * geometry.scaleXSign
-        val flippedY = (point.y / source.height - 0.5f) * unrotatedHeight * geometry.scaleYSign
-        val rotated = when (turns) {
-            0 -> FloatPoint(flippedX, flippedY)
-            1 -> FloatPoint(-flippedY, flippedX)
-            2 -> FloatPoint(-flippedX, -flippedY)
-            else -> FloatPoint(flippedY, -flippedX)
+        val unrotatedWidth = if (turns % 2 == 0) {
+            geometry.imageWidth.toDouble()
+        } else {
+            geometry.imageHeight.toDouble()
         }
-        return FloatPoint(
-            x = output.width / 2f + geometry.translationX + rotated.x,
-            y = output.height / 2f + geometry.translationY + rotated.y,
+        val unrotatedHeight = if (turns % 2 == 0) {
+            geometry.imageHeight.toDouble()
+        } else {
+            geometry.imageWidth.toDouble()
+        }
+        val flippedX = (point.x / source.width - 0.5) *
+                unrotatedWidth * geometry.scaleXSign.toDouble()
+        val flippedY = (point.y / source.height - 0.5) *
+                unrotatedHeight * geometry.scaleYSign.toDouble()
+        val rotated = when (turns) {
+            0 -> AffinePoint(flippedX, flippedY)
+            1 -> AffinePoint(-flippedY, flippedX)
+            2 -> AffinePoint(-flippedX, -flippedY)
+            else -> AffinePoint(flippedY, -flippedX)
+        }
+        return AffinePoint(
+            x = output.width / 2.0 + geometry.translationX.toDouble() + rotated.x,
+            y = output.height / 2.0 + geometry.translationY.toDouble() + rotated.y,
         )
     }
 
@@ -313,11 +332,11 @@ class CropRenderPlannerTest {
     ) {
         val bounds = plan.visibleSourceBounds
         val outputSamples = outputCorners(output) +
-                DoublePoint(output.width / 2.0, output.height / 2.0)
+                AffinePoint(output.width / 2.0, output.height / 2.0)
         outputSamples
             .map { point -> inverseUsingDouble(plan.sourceToOutput, point) }
             .forEach { point ->
-                val clampedPoint = DoublePoint(
+                val clampedPoint = AffinePoint(
                     x = point.x.coerceIn(0.0, source.width.toDouble()),
                     y = point.y.coerceIn(0.0, source.height.toDouble()),
                 )
@@ -334,51 +353,51 @@ class CropRenderPlannerTest {
 
     private fun inverseUsingDouble(
         transform: AffineTransform,
-        point: DoublePoint,
-    ): DoublePoint {
-        val scaleX = transform.scaleX.toDouble()
-        val skewX = transform.skewX.toDouble()
-        val translateX = transform.translateX.toDouble()
-        val skewY = transform.skewY.toDouble()
-        val scaleY = transform.scaleY.toDouble()
-        val translateY = transform.translateY.toDouble()
+        point: AffinePoint,
+    ): AffinePoint {
+        val scaleX = transform.scaleX
+        val skewX = transform.skewX
+        val translateX = transform.translateX
+        val skewY = transform.skewY
+        val scaleY = transform.scaleY
+        val translateY = transform.translateY
         val determinant = scaleX * scaleY - skewX * skewY
         val translatedX = point.x - translateX
         val translatedY = point.y - translateY
-        return DoublePoint(
+        return AffinePoint(
             x = (scaleY * translatedX - skewX * translatedY) / determinant,
             y = (-skewY * translatedX + scaleX * translatedY) / determinant,
         )
     }
 
-    private fun outputCorners(output: ImageSize): List<DoublePoint> = listOf(
-        DoublePoint(0.0, 0.0),
-        DoublePoint(output.width.toDouble(), 0.0),
-        DoublePoint(0.0, output.height.toDouble()),
-        DoublePoint(output.width.toDouble(), output.height.toDouble()),
+    private fun outputCorners(output: ImageSize): List<AffinePoint> = listOf(
+        AffinePoint(0.0, 0.0),
+        AffinePoint(output.width.toDouble(), 0.0),
+        AffinePoint(0.0, output.height.toDouble()),
+        AffinePoint(output.width.toDouble(), output.height.toDouble()),
     )
 
     private fun mapCenterLikeRoundedPreview(
         output: ImageSize,
         transform: CropTransform,
         geometry: RenderGeometry,
-    ): FloatPoint {
+    ): AffinePoint {
         val turns = ((transform.quarterTurns % 4) + 4) % 4
         val unrotatedWidth = if (turns % 2 == 0) geometry.imageWidth else geometry.imageHeight
         val unrotatedHeight = if (turns % 2 == 0) geometry.imageHeight else geometry.imageWidth
         val localX = (-unrotatedWidth / 2f).roundToInt() + unrotatedWidth.roundToInt() / 2f
         val localY = (-unrotatedHeight / 2f).roundToInt() + unrotatedHeight.roundToInt() / 2f
-        val flippedX = localX * geometry.scaleXSign
-        val flippedY = localY * geometry.scaleYSign
+        val flippedX = localX.toDouble() * geometry.scaleXSign.toDouble()
+        val flippedY = localY.toDouble() * geometry.scaleYSign.toDouble()
         val rotated = when (turns) {
-            0 -> FloatPoint(flippedX, flippedY)
-            1 -> FloatPoint(-flippedY, flippedX)
-            2 -> FloatPoint(-flippedX, -flippedY)
-            else -> FloatPoint(flippedY, -flippedX)
+            0 -> AffinePoint(flippedX, flippedY)
+            1 -> AffinePoint(-flippedY, flippedX)
+            2 -> AffinePoint(-flippedX, -flippedY)
+            else -> AffinePoint(flippedY, -flippedX)
         }
-        return FloatPoint(
-            x = output.width / 2f + geometry.translationX + rotated.x,
-            y = output.height / 2f + geometry.translationY + rotated.y,
+        return AffinePoint(
+            x = output.width / 2.0 + geometry.translationX.toDouble() + rotated.x,
+            y = output.height / 2.0 + geometry.translationY.toDouble() + rotated.y,
         )
     }
 
@@ -391,17 +410,16 @@ class CropRenderPlannerTest {
         assertTrue(bounds.bottom > bounds.top)
     }
 
-    private fun assertPointEquals(expected: FloatPoint, actual: FloatPoint) {
-        assertEquals(expected.x, actual.x, 0.01f)
-        assertEquals(expected.y, actual.y, 0.01f)
+    private fun assertPointEquals(
+        expected: AffinePoint,
+        actual: AffinePoint,
+        tolerance: Double = 0.01,
+    ) {
+        assertEquals(expected.x, actual.x, tolerance)
+        assertEquals(expected.y, actual.y, tolerance)
     }
 
-    private data class DoublePoint(
-        val x: Double,
-        val y: Double,
-    )
-
     private companion object {
-        const val PREVIEW_ROUNDING_TOLERANCE = 0.501f
+        const val PREVIEW_ROUNDING_TOLERANCE = 0.501
     }
 }
