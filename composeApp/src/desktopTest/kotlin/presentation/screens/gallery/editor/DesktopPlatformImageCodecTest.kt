@@ -18,6 +18,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -148,6 +149,33 @@ class DesktopPlatformImageCodecTest {
             assertEquals(1, Stats.allocated["Bitmap"] ?: 0)
 
             bitmap.asSkiaBitmap().close()
+            assertEquals(0, Stats.allocated["Bitmap"] ?: 0)
+        } finally {
+            Stats.allocated.clear()
+            Stats.enabled = previousEnabled
+        }
+    }
+
+    @Test
+    fun promptCancellationAfterWorkerCompletionClosesOwnedPixels() {
+        val previousEnabled = Stats.enabled
+        Stats.enabled = true
+        Stats.allocated.clear()
+        try {
+            val workerDispatcher = QueuedTestDispatcher()
+            val cancellation = CancellationException("cancelled")
+            val bitmap = createOwnedImageBitmap()
+
+            val result = cancelAfterWorkerCompletion(workerDispatcher, cancellation) {
+                withOwnedPlatformImageResult(
+                    dispatcher = workerDispatcher,
+                    ownedBitmap = { it },
+                ) {
+                    bitmap
+                }
+            }
+
+            assertIs<CancellationException>(result.exceptionOrNull())
             assertEquals(0, Stats.allocated["Bitmap"] ?: 0)
         } finally {
             Stats.allocated.clear()

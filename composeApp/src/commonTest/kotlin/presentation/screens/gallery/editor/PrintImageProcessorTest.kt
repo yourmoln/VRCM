@@ -70,6 +70,43 @@ abstract class PrintImageProcessorContractTest {
     }
 
     @Test
+    fun prepareValidationFailureReleasesDecodedPreview() = runBlocking {
+        val released = mutableListOf<ImageBitmap>()
+        val codec = FakePlatformImageCodec(
+            originalSize = ImageSize(10_001, 10_001),
+            allowDecode = true,
+            decodedBitmap = PreviewOwnershipTestBitmap,
+        )
+        val processor = DefaultPrintImageProcessor(
+            codec = codec,
+            releaseBitmap = released::add,
+        )
+
+        val result = processor.prepare(SelectedImage("huge.png", byteArrayOf(1)))
+
+        assertIs<PrintImageFailure.ImageDimensionsTooLarge>(result.exceptionOrNull())
+        assertEquals(listOf<ImageBitmap>(PreviewOwnershipTestBitmap), released)
+    }
+
+    @Test
+    fun successfulPrepareTransfersPreviewWithoutReleasingIt() = runBlocking {
+        val released = mutableListOf<ImageBitmap>()
+        val codec = FakePlatformImageCodec(
+            allowDecode = true,
+            decodedBitmap = PreviewOwnershipTestBitmap,
+        )
+        val processor = DefaultPrintImageProcessor(
+            codec = codec,
+            releaseBitmap = released::add,
+        )
+
+        val prepared = processor.prepare(SelectedImage("photo.png", byteArrayOf(1))).getOrThrow()
+
+        assertSame(PreviewOwnershipTestBitmap, prepared.preview)
+        assertEquals(emptyList(), released)
+    }
+
+    @Test
     fun renderUsesPlatformCropWithoutPreviewDecodeAndBuildsPrintCanvas() = runBlocking {
         val originalSize = ImageSize(6_000, 4_000)
         val transform = CropTransform(
@@ -266,6 +303,7 @@ private class FakePlatformImageCodec(
     private val originalSize: ImageSize = ImageSize(1_920, 1_080),
     private val encodedBytes: ByteArray = pngHeader(2_048, 1_440),
     private val allowDecode: Boolean = false,
+    private val decodedBitmap: ImageBitmap? = null,
     private val decodeFailure: Throwable? = null,
     private val renderFailure: Throwable? = null,
     private val renderedBitmap: ImageBitmap? = null,
@@ -281,7 +319,7 @@ private class FakePlatformImageCodec(
         decodeFailure?.let { throw it }
         check(allowDecode) { "Final rendering must not use preview decode" }
         decodeRequests += request
-        return DecodedImage(solidBitmap(16, 9, Color.Red), originalSize)
+        return DecodedImage(decodedBitmap ?: solidBitmap(16, 9, Color.Red), originalSize)
     }
 
     override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap {
@@ -297,6 +335,26 @@ private class FakePlatformImageCodec(
         encodeFailure?.let { throw it }
         return encodedBytes
     }
+}
+
+private data object PreviewOwnershipTestBitmap : ImageBitmap {
+    override val width: Int = 16
+    override val height: Int = 9
+    override val colorSpace: ColorSpace = ColorSpaces.Srgb
+    override val hasAlpha: Boolean = true
+    override val config: ImageBitmapConfig = ImageBitmapConfig.Argb8888
+
+    override fun readPixels(
+        buffer: IntArray,
+        startX: Int,
+        startY: Int,
+        width: Int,
+        height: Int,
+        bufferOffset: Int,
+        stride: Int,
+    ) = Unit
+
+    override fun prepareToDraw() = Unit
 }
 
 private data object InvalidContentBitmap : ImageBitmap {

@@ -55,6 +55,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageEdi
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageFailure
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageLimits
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.PrintImageProcessor
+import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.handoffPreparedImageToEditor
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.SelectedImage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.localizedMessage
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.readBoundedBytes
@@ -175,10 +176,14 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                             SharedFlowCentre.toastText.emit(ToastText.Error(message))
                             return@launch
                         }
-                        val sessionId = editorSessionStore.create(source, prepared)
-                        runCatching { navigator.push(PrintImageEditorScreen(sessionId)) }
-                            .onFailure { editorSessionStore.discard(sessionId) }
-                            .getOrThrow()
+                        handoffPreparedImageToEditor(
+                            source = source,
+                            prepared = prepared,
+                            sessionStore = editorSessionStore,
+                            push = { sessionId ->
+                                navigator.push(PrintImageEditorScreen(sessionId))
+                            },
+                        )
                     } finally {
                         isPreparing = false
                     }

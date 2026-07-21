@@ -24,6 +24,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
@@ -32,6 +33,36 @@ import kotlin.test.assertTrue
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AndroidPlatformImageCodecTest {
     private val codec = AndroidPlatformImageCodec()
+
+    @Test
+    fun orientationReaderPreservesCancellationIdentity() {
+        val cancellation = CancellationException("cancelled")
+
+        val thrown = assertFailsWith<CancellationException> {
+            readAndroidImageOrientation { throw cancellation }
+        }
+
+        assertSame(cancellation, thrown)
+    }
+
+    @Test
+    fun orientationReaderPreservesFatalErrorIdentity() {
+        val fatal = AssertionError("fatal")
+
+        val thrown = assertFailsWith<AssertionError> {
+            readAndroidImageOrientation { throw fatal }
+        }
+
+        assertSame(fatal, thrown)
+    }
+
+    @Test
+    fun orientationReaderFallsBackOnlyForRecoverableExceptions() {
+        assertEquals(1, readAndroidImageOrientation { throw IllegalArgumentException("exif") })
+        assertEquals(1, readAndroidImageOrientation { 0 })
+        assertEquals(1, readAndroidImageOrientation { 9 })
+        assertEquals(6, readAndroidImageOrientation { 6 })
+    }
 
     @Test
     fun cancellationsAreNotMappedToRecoverableImageFailures() {
@@ -69,6 +100,25 @@ class AndroidPlatformImageCodecTest {
         }
 
         assertSame(cancellation, thrown)
+        assertTrue(androidBitmap.isRecycled)
+    }
+
+    @Test
+    fun promptCancellationAfterWorkerCompletionRecyclesOwnedPixels() {
+        val workerDispatcher = QueuedTestDispatcher()
+        val cancellation = CancellationException("cancelled")
+        val androidBitmap = Bitmap.createBitmap(12, 7, Bitmap.Config.ARGB_8888)
+
+        val result = cancelAfterWorkerCompletion(workerDispatcher, cancellation) {
+            withOwnedPlatformImageResult(
+                dispatcher = workerDispatcher,
+                ownedBitmap = { it },
+            ) {
+                androidBitmap.asImageBitmap()
+            }
+        }
+
+        assertIs<CancellationException>(result.exceptionOrNull())
         assertTrue(androidBitmap.isRecycled)
     }
 

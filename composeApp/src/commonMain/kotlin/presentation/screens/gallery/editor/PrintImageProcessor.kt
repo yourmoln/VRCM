@@ -29,12 +29,15 @@ class DefaultPrintImageProcessor(
     override suspend fun prepare(source: SelectedImage): Result<PreparedImage> = try {
         validateSource(source)
         val decoded = decodePreview(source.bytes)
-        validateDimensions(decoded.originalSize)
-        Result.success(
+        val prepared = handoffOwnedBitmap(decoded.bitmap) {
+            validateDimensions(decoded.originalSize)
             PreparedImage(
                 preview = decoded.bitmap,
                 originalSize = decoded.originalSize,
-            ),
+            )
+        }
+        Result.success(
+            prepared,
         )
     } catch (cause: CancellationException) {
         throw cause

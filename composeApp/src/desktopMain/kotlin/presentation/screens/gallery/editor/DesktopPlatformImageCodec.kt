@@ -22,7 +22,10 @@ import org.jetbrains.skia.Surface
 
 class DesktopPlatformImageCodec : PlatformImageCodec {
     override suspend fun decode(bytes: ByteArray, request: DecodeRequest): DecodedImage =
-        withContext(Dispatchers.Default) {
+        withOwnedPlatformImageResult(
+            dispatcher = Dispatchers.Default,
+            ownedBitmap = DecodedImage::bitmap,
+        ) {
             require(request.maxDimension > 0) { "maxDimension must be positive" }
             require(request.maxPixels > 0) { "maxPixels must be positive" }
             mapDesktopImageFailure(DesktopFailureOperation.DECODE) {
@@ -71,7 +74,10 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
         }
 
     override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
-        withContext(Dispatchers.Default) {
+        withOwnedPlatformImageResult(
+            dispatcher = Dispatchers.Default,
+            ownedBitmap = { it },
+        ) {
             mapDesktopImageFailure(DesktopFailureOperation.RENDER) {
                 val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
                 val metadata = withCodec(bytes) { _, metadata -> metadata }

@@ -1,5 +1,6 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 
+import androidx.compose.ui.graphics.ImageBitmap
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.service.PrintUploader
@@ -62,6 +63,7 @@ class PrintImageEditorScreenModel(
     private val workerDispatcher: CoroutineDispatcher = Dispatchers.Default,
     private val workerExceptionHandler: CoroutineExceptionHandler? = null,
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
+    private val releasePreview: (ImageBitmap) -> Unit = ::releasePlatformImageBitmap,
 ) : ScreenModel {
     private val _state = MutableStateFlow(PrintImageEditorState(prepared = prepared))
     val state: StateFlow<PrintImageEditorState> = _state.asStateFlow()
@@ -71,9 +73,14 @@ class PrintImageEditorScreenModel(
 
     private var cachedPng: ByteArray? = null
     private var cachedFileName: String? = null
+    private var previewReleased = false
 
     override fun onDispose() {
         sessionStore.discard(sessionId)
+        if (!previewReleased) {
+            previewReleased = true
+            releasePreview(_state.value.prepared.preview)
+        }
     }
 
     fun panAndZoom(

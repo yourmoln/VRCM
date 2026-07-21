@@ -86,7 +86,10 @@ class IosPlatformImageCodec : PlatformImageCodec {
     }
 
     override suspend fun decode(bytes: ByteArray, request: DecodeRequest): DecodedImage =
-        withContext(Dispatchers.Default) {
+        withOwnedPlatformImageResult(
+            dispatcher = Dispatchers.Default,
+            ownedBitmap = DecodedImage::bitmap,
+        ) {
             try {
                 withImageSource(bytes) { source ->
                     val metadata = inspect(source)
@@ -122,7 +125,10 @@ class IosPlatformImageCodec : PlatformImageCodec {
         }
 
     override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
-        withContext(Dispatchers.Default) {
+        withOwnedPlatformImageResult(
+            dispatcher = Dispatchers.Default,
+            ownedBitmap = { it },
+        ) {
             try {
                 val metadata = withImageSource(bytes, ::inspect)
                 currentCoroutineContext().ensureActive()

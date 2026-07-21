@@ -190,6 +190,7 @@ class PrintImageEditorScreenModelTest {
         val store = PrintImageEditorSessionStore()
         val source = SelectedImage("source.jpg", byteArrayOf(1))
         val prepared = PreparedImage(TestImageBitmap, ImageSize(1_920, 1_080))
+        val released = mutableListOf<ImageBitmap>()
         val sessionId = store.create(source, prepared)
         val model = PrintImageEditorScreenModel(
             source = source,
@@ -200,11 +201,16 @@ class PrintImageEditorScreenModelTest {
             sessionId = sessionId,
             sessionStore = store,
             workerDispatcher = Dispatchers.Unconfined,
+            releasePreview = released::add,
         )
 
+        store.complete(sessionId)
+        assertEquals(emptyList(), released)
+        model.onDispose()
         model.onDispose()
 
         assertNull(store.get(sessionId))
+        assertEquals(listOf<ImageBitmap>(TestImageBitmap), released)
     }
 
     @Test

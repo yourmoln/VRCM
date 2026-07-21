@@ -30,7 +30,10 @@ import kotlin.math.roundToInt
 
 class AndroidPlatformImageCodec : PlatformImageCodec {
     override suspend fun decode(bytes: ByteArray, request: DecodeRequest): DecodedImage =
-        withContext(Dispatchers.IO) {
+        withOwnedPlatformImageResult(
+            dispatcher = Dispatchers.IO,
+            ownedBitmap = DecodedImage::bitmap,
+        ) {
             require(request.maxDimension > 0) { "maxDimension must be positive" }
             require(request.maxPixels > 0) { "maxPixels must be positive" }
             val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
@@ -76,7 +79,10 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
         }
 
     override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
-        withContext(Dispatchers.IO) {
+        withOwnedPlatformImageResult(
+            dispatcher = Dispatchers.IO,
+            ownedBitmap = { it },
+        ) {
             val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
             mapAndroidImageFailure(AndroidFailureOperation.RENDER) {
                 val format = bytes.detectFormat() ?: throw PrintImageFailure.UnsupportedFormat()
@@ -154,15 +160,14 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
     }
 
     private fun readOrientation(bytes: ByteArray): Int {
-        val orientation = runCatching {
+        return readAndroidImageOrientation {
             ByteArrayInputStream(bytes).use { input ->
                 ExifInterface(input).getAttributeInt(
                     ExifInterface.TAG_ORIENTATION,
                     ExifInterface.ORIENTATION_NORMAL,
                 )
             }
-        }.getOrDefault(ExifInterface.ORIENTATION_NORMAL)
-        return orientation.takeIf { it in 1..8 } ?: ExifInterface.ORIENTATION_NORMAL
+        }
     }
 
     private fun applyOrientation(source: Bitmap, orientation: Int): Bitmap {
@@ -475,6 +480,17 @@ internal inline fun handoffAndroidImageBitmap(
 } catch (cause: Error) {
     releaseAndroidImageBitmapAfterFailure(bitmap, cause)
     throw cause
+}
+
+internal inline fun readAndroidImageOrientation(reader: () -> Int): Int {
+    val orientation = try {
+        reader()
+    } catch (cause: CancellationException) {
+        throw cause
+    } catch (_: Exception) {
+        ExifInterface.ORIENTATION_NORMAL
+    }
+    return orientation.takeIf { it in 1..8 } ?: ExifInterface.ORIENTATION_NORMAL
 }
 
 private fun releaseAndroidImageBitmapAfterFailure(
