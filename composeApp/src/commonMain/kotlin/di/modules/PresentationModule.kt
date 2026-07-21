@@ -54,7 +54,7 @@ val presentationModule: Module = module {
     factoryOf(::MutualFriendsScreenModel)
     factoryOf(::FriendNetworkScreenModel)
     singleOf(::NetworkGalleryDataSource) bind GalleryDataSource::class
-    single { GalleryScreenModel(get(), get()) }
+    factory { GalleryScreenModel(get(), get()) }
     single { CropTransformCalculator() }
     singleOf(::PrintImageEditorSessionStore)
     single<PrintImageProcessor> { DefaultPrintImageProcessor(get()) }

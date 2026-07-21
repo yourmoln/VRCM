@@ -77,14 +77,20 @@ class SearchListPagerModel(
     private val _searchText = MutableStateFlow("")
     val searchText: StateFlow<String> = _searchText.asStateFlow()
 
+    private var authenticatedUserId: String? = authService.accountDtoOrNull()?.userId
+
     init {
         // 监听登录状态,用于重新登录后更新刷新状态
         screenModelScope.launch {
-            SharedFlowCentre.authed.collect {
-                _userSearchList.value = emptyList()
-                _worldSearchList.value = emptyList()
-                _groupSearchList.value = emptyList()
-                resetGroupPaging()
+            SharedFlowCentre.authed.collect { account ->
+                val accountChanged = authenticatedUserId != account.userId
+                authenticatedUserId = account.userId
+                if (accountChanged) {
+                    _userSearchList.value = emptyList()
+                    _worldSearchList.value = emptyList()
+                    _groupSearchList.value = emptyList()
+                    resetGroupPaging()
+                }
             }
         }
     }
@@ -105,6 +111,9 @@ class SearchListPagerModel(
         advanceRequestGeneration()
         _searchText.value = text
         invalidateGroupPaging()
+        if (text.isEmpty()) {
+            _groupSearchList.value = emptyList()
+        }
     }
 
     /**

@@ -155,7 +155,7 @@ object GalleryScreen : Screen {
                         modifier = Modifier.fillMaxSize(),
                         contentAlignment = Alignment.Center
                     ) {
-                        tabPager.Content()
+                        tabPager.Content(galleryScreenModel)
                     }
                 }
             }

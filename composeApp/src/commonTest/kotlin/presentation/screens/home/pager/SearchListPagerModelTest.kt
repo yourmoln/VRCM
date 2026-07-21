@@ -1,6 +1,7 @@
 package io.github.vrcmteam.vrcm.presentation.screens.home.pager
 
 import com.russhwolf.settings.MapSettings
+import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.di.supports.PersistentCookiesStorage
 import io.github.vrcmteam.vrcm.network.api.auth.AuthApi
 import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
@@ -9,6 +10,7 @@ import io.github.vrcmteam.vrcm.network.api.worlds.WorldsApi
 import io.github.vrcmteam.vrcm.presentation.screens.home.compoments.SortOption
 import io.github.vrcmteam.vrcm.presentation.screens.home.data.WorldSearchOptions
 import io.github.vrcmteam.vrcm.service.AuthService
+import io.github.vrcmteam.vrcm.service.data.AccountDto
 import io.github.vrcmteam.vrcm.storage.AccountDao
 import io.github.vrcmteam.vrcm.testing.MainDispatcherTest
 import io.ktor.client.HttpClient
@@ -43,6 +45,86 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchListPagerModelTest : MainDispatcherTest() {
+    @Test
+    fun sameUserReauthenticationDoesNotInvalidateInFlightSearch() = runBlocking {
+        val account = AccountDto(
+            userId = "usr_same",
+            username = "same-user",
+            password = "password",
+        )
+        val requestStarted = CompletableDeferred<Unit>()
+        val releaseRequest = CompletableDeferred<Unit>()
+        val fixture = createFixture(account = account) {
+            requestStarted.complete(Unit)
+            releaseRequest.await()
+            jsonResponse(groupJson("grp_retried"))
+        }
+        fixture.model.setSearchType(3)
+        fixture.model.setSearchText("reauth")
+        val search = async(start = CoroutineStart.UNDISPATCHED) {
+            fixture.model.refreshSearchList()
+        }
+        requestStarted.await()
+
+        SharedFlowCentre.authed.emit(account)
+        releaseRequest.complete(Unit)
+
+        assertTrue(search.await())
+        assertEquals(listOf("grp_retried"), fixture.model.groupSearchList.value.map { it.id })
+        fixture.close()
+    }
+
+    @Test
+    fun changingAuthenticatedUserClearsSearchResults() = runBlocking {
+        val fixture = createFixture(
+            account = AccountDto(userId = "usr_old", username = "old-user"),
+        ) {
+            jsonResponse(groupJson("grp_old_account"))
+        }
+        fixture.model.setSearchType(3)
+        fixture.model.setSearchText("account")
+        assertTrue(fixture.model.refreshSearchList())
+
+        SharedFlowCentre.authed.emit(
+            AccountDto(userId = "usr_new", username = "new-user"),
+        )
+
+        assertTrue(fixture.model.groupSearchList.value.isEmpty())
+        fixture.close()
+    }
+
+    @Test
+    fun clearingGroupQueryClearsResultsAndRejectsLateResponse() = runBlocking {
+        val lateRequestStarted = CompletableDeferred<Unit>()
+        val releaseLateRequest = CompletableDeferred<Unit>()
+        var requestCount = 0
+        val fixture = createFixture {
+            requestCount++
+            if (requestCount == 1) {
+                jsonResponse(groupJson("grp_existing"))
+            } else {
+                lateRequestStarted.complete(Unit)
+                releaseLateRequest.await()
+                jsonResponse(groupJson("grp_late"))
+            }
+        }
+        fixture.model.setSearchType(3)
+        fixture.model.setSearchText("group")
+        assertTrue(fixture.model.refreshSearchList())
+        val lateSearch = async(start = CoroutineStart.UNDISPATCHED) {
+            fixture.model.refreshSearchList()
+        }
+        lateRequestStarted.await()
+
+        fixture.model.setSearchText("")
+
+        assertTrue(fixture.model.groupSearchList.value.isEmpty())
+        releaseLateRequest.complete(Unit)
+        lateSearch.await()
+        assertTrue(fixture.model.groupSearchList.value.isEmpty())
+        fixture.close()
+    }
+
     @Test
     fun olderGroupQueryCannotOverwriteNewerResults() = runBlocking {
         val oldStarted = CompletableDeferred<Unit>()
@@ -396,6 +478,7 @@ private class SearchModelFixture(
 }
 
 private fun createFixture(
+    account: AccountDto? = null,
     handler: MockRequestHandler,
 ): SearchModelFixture {
     val logger = EmptyLogger()
@@ -405,9 +488,12 @@ private fun createFixture(
             json(Json { ignoreUnknownKeys = true })
         }
     }
+    val accountDao = AccountDao(MapSettings()).also { dao ->
+        account?.let(dao::saveAccountInfo)
+    }
     val authService = AuthService(
         authApi = AuthApi(client),
-        accountDao = AccountDao(MapSettings()),
+        accountDao = accountDao,
         cookiesStorage = PersistentCookiesStorage(logger),
     )
     return SearchModelFixture(

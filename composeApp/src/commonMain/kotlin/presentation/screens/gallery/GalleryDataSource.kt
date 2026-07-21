@@ -51,17 +51,27 @@ internal class NetworkGalleryDataSource(
         fileName: String,
         mimeType: String,
         tagType: FileTagType,
-    ): Result<FileData> = runGalleryUploadWithAuthRetry(
+    ): Result<FileData> = runGalleryRequestWithAuthRetry(
         retryAuth = { request -> authService.reTryAuth(request) },
         request = { fileApi.uploadImageFile(fileBytes, fileName, mimeType, tagType) },
     )
 
-    override suspend fun deleteFile(id: String) = fileApi.deleteFile(id)
+    override suspend fun deleteFile(id: String) {
+        runGalleryRequestWithAuthRetry(
+            retryAuth = { request -> authService.reTryAuth(request) },
+            request = { runGalleryCatching { fileApi.deleteFile(id) } },
+        ).getOrThrow()
+    }
 
-    override suspend fun deletePrint(id: String) = printsApi.deletePrint(id)
+    override suspend fun deletePrint(id: String) {
+        runGalleryRequestWithAuthRetry(
+            retryAuth = { request -> authService.reTryAuth(request) },
+            request = { runGalleryCatching { printsApi.deletePrint(id) } },
+        ).getOrThrow()
+    }
 }
 
-internal suspend fun <T> runGalleryUploadWithAuthRetry(
+internal suspend fun <T> runGalleryRequestWithAuthRetry(
     retryAuth: suspend (suspend () -> Result<T>) -> Result<T>,
     request: suspend () -> Result<T>,
 ): Result<T> {

@@ -32,11 +32,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
-import androidx.compose.ui.graphics.painter.Painter
-import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
-import cafe.adriel.voyager.koin.koinScreenModel
 import cafe.adriel.voyager.navigator.LocalNavigator
 import cafe.adriel.voyager.navigator.currentOrThrow
 import com.skydoves.landscapist.ImageOptions
@@ -60,31 +57,22 @@ import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.localizedMess
 import io.github.vrcmteam.vrcm.presentation.screens.gallery.editor.readBoundedBytes
 import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
-import io.github.vrcmteam.vrcm.presentation.supports.Pager
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.koin.compose.koinInject
 
-sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
+sealed class GalleryTabPager(private val tagType: FileTagType) {
 
     /** 供 GalleryScreen 读取以展示计数/上限 */
     val fileTagType: FileTagType get() = tagType
 
-    override val index: Int
-        get() = tagType.ordinal
-
-    override val title: String
+    val title: String
         @Composable
         get() = tagType.toString().replaceFirstChar { it.uppercase() }
 
-    override val icon: Painter?
-        @Composable
-        get() = null
-
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
-    override fun Content() {
-        val galleryScreenModel: GalleryScreenModel = koinScreenModel()
+    fun Content(galleryScreenModel: GalleryScreenModel) {
         val navigator = LocalNavigator.currentOrThrow
         val printImageProcessor: PrintImageProcessor = koinInject()
         val editorSessionStore: PrintImageEditorSessionStore = koinInject()
@@ -265,7 +253,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         if (prints.isEmpty() && !galleryScreenModel.isRefreshingPrints) {
             EmptyContent(message = strings.galleryTabNoFiles.replace("%s", title))
         } else {
-            PrintGrid(prints)
+            PrintGrid(prints, galleryScreenModel)
         }
     }
 
@@ -275,7 +263,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         if (files.isEmpty() && !galleryScreenModel.isRefreshingByTag(tagType)) {
             EmptyContent(message = strings.galleryTabNoFiles.replace("%s", title))
         } else {
-            GalleryGrid(files, tagType)
+            GalleryGrid(files, tagType, galleryScreenModel)
         }
     }
 
@@ -283,7 +271,10 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
      * 拍立得网格展示
      */
     @Composable
-    private fun PrintGrid(prints: List<PrintData>) {
+    private fun PrintGrid(
+        prints: List<PrintData>,
+        galleryScreenModel: GalleryScreenModel,
+    ) {
         LazyVerticalGrid(
             columns = GridCells.Fixed(2),
             contentPadding = PaddingValues(8.dp),
@@ -295,15 +286,17 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 items = prints,
                 key = { it.id },
             ) { print ->
-                PrintItem(print)
+                PrintItem(print, galleryScreenModel)
             }
         }
     }
 
     @OptIn(ExperimentalFoundationApi::class)
     @Composable
-    private fun PrintItem(print: PrintData) {
-        val galleryScreenModel: GalleryScreenModel = koinScreenModel()
+    private fun PrintItem(
+        print: PrintData,
+        galleryScreenModel: GalleryScreenModel,
+    ) {
         val imageUrl = print.files?.image ?: ""
         val (dialogContent, setDialogContent) = LocationDialogContent.current
         val selected = galleryScreenModel.isSelected(FileTagType.Print, print.id)
@@ -382,7 +375,11 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
     }
 
     @Composable
-    private fun GalleryGrid(files: List<FileData>, tagType: FileTagType) {
+    private fun GalleryGrid(
+        files: List<FileData>,
+        tagType: FileTagType,
+        galleryScreenModel: GalleryScreenModel,
+    ) {
         // 根据文件类型设置不同的列数
         val count = when (tagType) {
             FileTagType.Gallery, FileTagType.Print -> 2
@@ -411,7 +408,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 items = files,
                 key = { it.id },
             ) { file ->
-                GalleryItem(file, tagType, aspectRatio, shape)
+                GalleryItem(file, tagType, galleryScreenModel, aspectRatio, shape)
             }
         }
     }
@@ -421,10 +418,10 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
     private fun GalleryItem(
         file: FileData,
         tagType: FileTagType,
+        galleryScreenModel: GalleryScreenModel,
         aspectRatio: Float = 1f,
         shape: Shape = MaterialTheme.shapes.medium
     ) {
-        val galleryScreenModel: GalleryScreenModel = koinScreenModel()
         val (dialogContent, setDialogContent) = LocationDialogContent.current
         val selected = galleryScreenModel.isSelected(tagType, file.id)
 

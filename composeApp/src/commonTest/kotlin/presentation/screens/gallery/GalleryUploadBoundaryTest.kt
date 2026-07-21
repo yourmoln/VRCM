@@ -14,7 +14,7 @@ class GalleryUploadBoundaryTest {
     fun directExceptionBecomesARecoverableFailureWithTheSameCause() = runBlocking {
         val failure = IllegalStateException("offline")
 
-        val result = runGalleryUploadWithAuthRetry<String>(
+        val result = runGalleryRequestWithAuthRetry<String>(
             retryAuth = { request -> request() },
             request = { throw failure },
         )
@@ -27,7 +27,7 @@ class GalleryUploadBoundaryTest {
     fun unauthorizedResultCanRetryTheSameUploadRequest() = runBlocking {
         var requestCount = 0
 
-        val result = runGalleryUploadWithAuthRetry(
+        val result = runGalleryRequestWithAuthRetry(
             retryAuth = { request ->
                 val first = request()
                 if ((first.exceptionOrNull() as? VRCApiException)?.code == 401) request() else first
@@ -47,17 +47,40 @@ class GalleryUploadBoundaryTest {
     }
 
     @Test
+    fun unauthorizedUnitRequestCanRetryTheSameOperation() = runBlocking {
+        var requestCount = 0
+
+        val result = runGalleryRequestWithAuthRetry(
+            retryAuth = { request ->
+                val first = request()
+                if ((first.exceptionOrNull() as? VRCApiException)?.code == 401) request() else first
+            },
+            request = {
+                requestCount++
+                if (requestCount == 1) {
+                    Result.failure(VRCApiException("Unauthorized", 401, ""))
+                } else {
+                    Result.success(Unit)
+                }
+            },
+        )
+
+        assertTrue(result.isSuccess)
+        assertEquals(2, requestCount)
+    }
+
+    @Test
     fun directAndReturnedCancellationKeepTheirIdentity() = runBlocking {
         val direct = CancellationException("direct")
         val thrownDirect = assertFailsWith<CancellationException> {
-            runGalleryUploadWithAuthRetry<String>(
+            runGalleryRequestWithAuthRetry<String>(
                 retryAuth = { request -> request() },
                 request = { throw direct },
             )
         }
         val returned = CancellationException("returned")
         val thrownReturned = assertFailsWith<CancellationException> {
-            runGalleryUploadWithAuthRetry(
+            runGalleryRequestWithAuthRetry(
                 retryAuth = { request -> request() },
                 request = { Result.failure<String>(returned) },
             )
@@ -71,14 +94,14 @@ class GalleryUploadBoundaryTest {
     fun directAndReturnedErrorsKeepTheirIdentity() = runBlocking {
         val direct = GalleryFatalError("direct")
         val thrownDirect = assertFailsWith<GalleryFatalError> {
-            runGalleryUploadWithAuthRetry<String>(
+            runGalleryRequestWithAuthRetry<String>(
                 retryAuth = { request -> request() },
                 request = { throw direct },
             )
         }
         val returned = GalleryFatalError("returned")
         val thrownReturned = assertFailsWith<GalleryFatalError> {
-            runGalleryUploadWithAuthRetry(
+            runGalleryRequestWithAuthRetry(
                 retryAuth = { request -> request() },
                 request = { Result.failure<String>(returned) },
             )
