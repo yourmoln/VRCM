@@ -469,7 +469,11 @@ class FriendListPagerModel(
             mergeFavoritedAvatars(remoteAvatars, localAvatars)
         }.onSuccess { avatars ->
             favoritedAvatarMap.clear()
-            favoritedAvatarMap.putAll(avatars.associateBy { it.id })
+            // 过滤掉不可见/非公开的模型
+            val validAvatars = avatars.filter { avatar ->
+                avatar.releaseStatus != "hidden"
+            }
+            favoritedAvatarMap.putAll(validAvatars.associateBy { it.id })
             _avatarTotal.value = favoritedAvatarMap.size
             findAvatarList(_searchText.value)
         }.onFailure {
