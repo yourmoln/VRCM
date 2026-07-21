@@ -11,6 +11,7 @@ import androidx.compose.material3.*
 import androidx.compose.material3.TabRowDefaults.tabIndicatorOffset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
@@ -19,7 +20,9 @@ import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
 import io.github.vrcmteam.vrcm.presentation.extensions.animateScrollToFirst
 import io.github.vrcmteam.vrcm.presentation.extensions.getInsetPadding
 import io.github.vrcmteam.vrcm.presentation.extensions.simpleClickable
+import io.github.vrcmteam.vrcm.presentation.screens.world.shouldLoadNextRecentWorldPage
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
+import kotlinx.coroutines.flow.distinctUntilChanged
 
 /**
  * 通用搜索列表组件
@@ -38,6 +41,8 @@ fun GenericSearchList(
     doRefresh: (suspend () -> Unit)? = null,
     headerContent: @Composable () -> Unit = {},
     advancedOptionsContent: @Composable (() -> Unit)? = null,
+    onLoadMore: (() -> Unit)? = null,
+    totalItemsCount: Int = 0,
     itemContent:  LazyListScope.(Int) -> Unit
 ) {
     val lazyListState = rememberLazyListState()
@@ -47,6 +52,20 @@ fun GenericSearchList(
         SharedFlowCentre.toPagerTop.collect {
             runCatching {
                 lazyListState.animateScrollToFirst()
+            }
+        }
+    }
+    
+    if (onLoadMore != null) {
+        LaunchedEffect(lazyListState, totalItemsCount) {
+            snapshotFlow {
+                val layoutInfo = lazyListState.layoutInfo
+                val lastVisibleIndex = layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
+                lastVisibleIndex to totalItemsCount
+            }.distinctUntilChanged().collect { (lastVisibleIndex, totalItemsCount) ->
+                if (shouldLoadNextRecentWorldPage(lastVisibleIndex, totalItemsCount)) {
+                    onLoadMore()
+                }
             }
         }
     }

@@ -37,12 +37,19 @@ fun StandardSearchList(
     userList: List<IUser> = emptyList(),
     worldList: List<WorldData> = emptyList(),
     avatarList: List<AvatarData> = emptyList(),
+    groupList: List<LimitedGroup> = emptyList(),
     // 目前群组功能可能还没实现，所以这里暂时留空
     modelContentBuilder: (LazyListScope.() -> Unit)? = null,
-    groupContentBuilder: (LazyListScope.() -> Unit)? = null
+    groupContentBuilder: (LazyListScope.() -> Unit)? = null,
+    // 是否显示群组标签（替换模型标签）
+    includeGroups: Boolean = false
 ) {
-    // 固定的标签页列表
-    val tabs = listOf(strings.users, strings.worlds, strings.avatars)
+    // 固定的标签页列表：根据includeGroups决定是否显示群组标签
+    val tabs = if (includeGroups) {
+        listOf(strings.users, strings.worlds, strings.groups)
+    } else {
+        listOf(strings.users, strings.worlds, strings.avatars)
+    }
     val coroutineScope = rememberCoroutineScope()
     val currentNavigator = currentNavigator
     val sharedSuffixKey = LocalSharedSuffixKey.current
@@ -74,6 +81,17 @@ fun StandardSearchList(
             coroutineScope.launch {
                 currentNavigator push AvatarProfileScreen(
                     avatarProfileVo = AvatarProfileVo(avatar),
+                    sharedSuffixKey = sharedSuffixKey
+                )
+            }
+        }
+    }
+    val onGroupClick = { group: LimitedGroup ->
+        // 处理群组点击，导航到群组详情页面
+        if (currentNavigator.size <= 1) {
+            coroutineScope.launch {
+                currentNavigator push GroupProfileScreen(
+                    groupProfileVo = GroupProfileVo(group.id),
                     sharedSuffixKey = sharedSuffixKey
                 )
             }
@@ -111,14 +129,18 @@ fun StandardSearchList(
                     onWorldClick = onWorldClick
                 )
             }
-            SearchTabType.AVATAR.index -> { // 模型标签页
-                renderAvatarItems(
-                    avatars = avatarList,
-                    onAvatarClick = onAvatarClick
-                )
-            }
-            SearchTabType.GROUP.index -> { // 群组标签页
-                groupContentBuilder?.invoke(this)
+            2 -> { // 第三个标签页：根据includeGroups决定显示模型还是群组
+                if (includeGroups) {
+                    renderGroupItems(
+                        groups = groupList,
+                        onGroupClick = onGroupClick
+                    )
+                } else {
+                    renderAvatarItems(
+                        avatars = avatarList,
+                        onAvatarClick = onAvatarClick
+                    )
+                }
             }
         }
     }

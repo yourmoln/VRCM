@@ -23,8 +23,10 @@ import io.github.vrcmteam.vrcm.network.api.attributes.UserStatus
 import io.github.vrcmteam.vrcm.network.api.avatars.data.AvatarData
 import io.github.vrcmteam.vrcm.network.api.files.data.PlatformType.*
 import io.github.vrcmteam.vrcm.network.api.friends.date.FriendData
+import io.github.vrcmteam.vrcm.network.api.groups.data.LimitedGroup
 import io.github.vrcmteam.vrcm.network.api.worlds.data.WorldData
 import io.github.vrcmteam.vrcm.presentation.extensions.ignoredFormat
+import io.github.vrcmteam.vrcm.presentation.settings.locale.strings
 import io.github.vrcmteam.vrcm.presentation.supports.AppIcons
 import io.github.vrcmteam.vrcm.service.platformPackages
 
@@ -232,6 +234,65 @@ fun LazyItemScope.renderAvatarItem(
                     )
                 }
             }
+        }
+    )
+}
+
+/**
+ * 群组列表渲染
+ */
+fun LazyListScope.renderGroupItems(
+    groups: List<LimitedGroup>,
+    onGroupClick: (LimitedGroup) -> Unit
+) {
+    items(groups, key = { it.id }) { group ->
+        renderGroupItem(group, onGroupClick)
+    }
+}
+
+/**
+ * 单个群组项渲染
+ */
+@OptIn(ExperimentalSharedTransitionApi::class)
+@Composable
+fun LazyItemScope.renderGroupItem(
+    group: LimitedGroup,
+    onGroupClick: (LimitedGroup) -> Unit
+) {
+    SearchResultItem(
+        item = group,
+        onClick = onGroupClick,
+        modifier = Modifier.animateItem(),
+        leadingContent = {
+            GroupIcon(
+                iconUrl = group.iconUrl,
+                modifier = Modifier.sharedBoundsBy("${group.id}GroupIcon"),
+                size = 48.dp
+            )
+        },
+        headlineContent = {
+            Text(
+                text = group.name,
+                style = MaterialTheme.typography.titleMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1
+            )
+        },
+        supportingContent = {
+            Text(
+                text = group.description,
+                style = MaterialTheme.typography.bodyMedium,
+                overflow = TextOverflow.Ellipsis,
+                maxLines = 1
+            )
+        },
+        trailingContent = {
+            // 显示成员数量
+            Text(
+                text = "${group.memberCount}",
+                style = MaterialTheme.typography.labelSmall,
+                maxLines = 1
+            )
         }
     )
 }

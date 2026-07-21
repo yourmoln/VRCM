@@ -3,6 +3,8 @@ package io.github.vrcmteam.vrcm.presentation.screens.home.pager
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.core.shared.SharedFlowCentre
+import io.github.vrcmteam.vrcm.network.api.groups.GroupsApi
+import io.github.vrcmteam.vrcm.network.api.groups.data.LimitedGroup
 import io.github.vrcmteam.vrcm.network.api.users.UsersApi
 import io.github.vrcmteam.vrcm.network.api.users.data.SearchUserData
 import io.github.vrcmteam.vrcm.network.api.worlds.WorldsApi
@@ -25,6 +27,7 @@ import org.koin.core.logger.Logger
 class SearchListPagerModel(
     private val usersApi: UsersApi,
     private val worldsApi: WorldsApi,
+    private val groupsApi: GroupsApi,
     private val authService: AuthService,
     private val logger: Logger
 ) : ScreenModel {
@@ -37,7 +40,11 @@ class SearchListPagerModel(
     private val _worldSearchList =  MutableStateFlow(emptyList<WorldData>())
     var worldSearchList = _worldSearchList.asStateFlow()
 
-    // 当前搜索类型：0表示用户，1表示世界
+    // 群组搜索列表
+    private val _groupSearchList = MutableStateFlow(emptyList<LimitedGroup>())
+    val groupSearchList: StateFlow<List<LimitedGroup>> = _groupSearchList.asStateFlow()
+
+    // 当前搜索类型：0表示用户，1表示世界，3表示群组
     private val _searchType = MutableStateFlow(0)
     val searchType  = _searchType.asStateFlow()
         
@@ -59,16 +66,17 @@ class SearchListPagerModel(
             SharedFlowCentre.authed.collect {
                 _userSearchList.value = emptyList()
                 _worldSearchList.value = emptyList()
+                _groupSearchList.value = emptyList()
             }
         }
     }
 
     /**
      * 设置搜索类型
-     * @param type 0: 用户搜索, 1: 世界搜索
+     * @param type 0: 用户搜索, 1: 世界搜索, 3: 群组搜索
      */
     fun setSearchType(type: Int) {
-        if (!(type in 0..1 && type != searchType.value)) return
+        if (!(type in 0..3 && type != searchType.value)) return
         _searchType.value = type
     }
 
@@ -101,6 +109,7 @@ class SearchListPagerModel(
             return@async when (searchType) {
                 0 -> searchUsers(searchText)
                 1 -> searchWorlds(searchText)
+                3 -> if (searchText.isNotEmpty()) searchGroups(searchText) else false
                 else -> false
             }.also {
                 preSearchType = searchType
@@ -152,6 +161,21 @@ class SearchListPagerModel(
         }.onSuccess {
             _worldSearchList.value = it
         }.onApiFailure("WorldSearch") {
+            logger.error(it)
+        }.isSuccess
+    }
+
+    /**
+     * 搜索群组
+     * @param query 搜索关键词
+     * @return 是否搜索成功
+     */
+    private suspend fun searchGroups(query: String): Boolean {
+        return authService.reTryAuthCatching {
+            groupsApi.searchGroups(query = query)
+        }.onSuccess {
+            _groupSearchList.value = it
+        }.onApiFailure("GroupSearch") {
             logger.error(it)
         }.isSuccess
     }
