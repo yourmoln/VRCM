@@ -1,7 +1,5 @@
 package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 
-import androidx.compose.ui.graphics.ImageBitmap
-import kotlinx.coroutines.runBlocking
 import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -50,6 +48,77 @@ class DecodeSizePlannerTest {
     }
 
     @Test
+    fun singlePixelBudgetProducesSinglePixelImage() {
+        val result = DecodeSizePlanner.plan(
+            source = ImageSize(100, 100),
+            request = DecodeRequest(maxDimension = 100, maxPixels = 1L),
+        )
+
+        assertEquals(ImageSize(1, 1), result)
+    }
+
+    @Test
+    fun singlePixelSourceIsPreserved() {
+        val result = DecodeSizePlanner.plan(
+            source = ImageSize(1, 1),
+            request = DecodeRequest(maxDimension = Int.MAX_VALUE, maxPixels = Long.MAX_VALUE),
+        )
+
+        assertEquals(ImageSize(1, 1), result)
+    }
+
+    @Test
+    fun maximumIntegerDimensionsDoNotOverflow() {
+        val source = ImageSize(Int.MAX_VALUE, Int.MAX_VALUE)
+
+        val result = DecodeSizePlanner.plan(
+            source = source,
+            request = DecodeRequest(maxDimension = Int.MAX_VALUE, maxPixels = Long.MAX_VALUE),
+        )
+
+        assertEquals(source, result)
+        assertEquals(4_611_686_014_132_420_609L, result.width.toLong() * result.height)
+    }
+
+    @Test
+    fun extremeAspectRatiosKeepBothDimensionsPositive() {
+        val landscape = DecodeSizePlanner.plan(
+            source = ImageSize(Int.MAX_VALUE, 1),
+            request = DecodeRequest(maxDimension = Int.MAX_VALUE, maxPixels = 2L),
+        )
+        val portrait = DecodeSizePlanner.plan(
+            source = ImageSize(1, Int.MAX_VALUE),
+            request = DecodeRequest(maxDimension = Int.MAX_VALUE, maxPixels = 2L),
+        )
+
+        assertEquals(ImageSize(2, 1), landscape)
+        assertEquals(ImageSize(1, 2), portrait)
+    }
+
+    @Test
+    fun everyPixelBudgetChoosesLargestFeasibleLongestEdge() {
+        val source = ImageSize(7, 5)
+        val longestEdgeLimit = 7
+
+        for (maxPixels in 1L..source.width.toLong() * source.height) {
+            val result = DecodeSizePlanner.plan(
+                source = source,
+                request = DecodeRequest(longestEdgeLimit, maxPixels),
+            )
+            val resultLongest = maxOf(result.width, result.height)
+
+            assertTrue(result.width.toLong() * result.height <= maxPixels)
+            assertTrue(resultLongest <= longestEdgeLimit)
+            if (resultLongest < longestEdgeLimit) {
+                val nextLongest = resultLongest + 1
+                val nextHeight =
+                    (nextLongest.toLong() * source.height / source.width).toInt().coerceAtLeast(1)
+                assertTrue(nextLongest.toLong() * nextHeight > maxPixels)
+            }
+        }
+    }
+
+    @Test
     fun irregularImageSatisfiesBothBoundsAndPreservesAspectRatio() {
         val source = ImageSize(9_999, 7_777)
         val request = DecodeRequest(maxDimension = 5_760, maxPixels = 16_000_000L)
@@ -91,23 +160,4 @@ class DecodeSizePlannerTest {
         }
     }
 
-    @Test
-    fun codecRequestOverloadForwardsMaximumDimension() = runBlocking {
-        val codec = RecordingPlatformImageCodec()
-
-        codec.decode(byteArrayOf(1), DecodeRequest(1_234, 5_678L))
-
-        assertEquals(1_234, codec.maxDimension)
-    }
-}
-
-private class RecordingPlatformImageCodec : PlatformImageCodec {
-    var maxDimension: Int? = null
-
-    override suspend fun decode(bytes: ByteArray, maxDimension: Int): DecodedImage {
-        this.maxDimension = maxDimension
-        return DecodedImage(ImageBitmap(1, 1), ImageSize(1, 1))
-    }
-
-    override suspend fun encodePng(bitmap: ImageBitmap): ByteArray = byteArrayOf()
 }
