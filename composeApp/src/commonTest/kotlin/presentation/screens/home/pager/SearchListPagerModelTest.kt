@@ -46,30 +46,41 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalCoroutinesApi::class)
 class SearchListPagerModelTest : MainDispatcherTest() {
     @Test
-    fun sameUserReauthenticationDoesNotInvalidateInFlightSearch() = runBlocking {
+    fun sameUserAuthenticationRetryKeepsSuccessfulSearchResult() = runBlocking {
         val account = AccountDto(
             userId = "usr_same",
             username = "same-user",
             password = "password",
         )
-        val requestStarted = CompletableDeferred<Unit>()
-        val releaseRequest = CompletableDeferred<Unit>()
-        val fixture = createFixture(account = account) {
-            requestStarted.complete(Unit)
-            releaseRequest.await()
-            jsonResponse(groupJson("grp_retried"))
+        var authRequestCount = 0
+        var groupRequestCount = 0
+        val fixture = createFixture(account = account) { request ->
+            when (request.url.encodedPath) {
+                "/auth/user" -> {
+                    authRequestCount++
+                    jsonResponse(currentUserJson(account))
+                }
+                "/groups" -> {
+                    groupRequestCount++
+                    if (groupRequestCount == 1) {
+                        respond(
+                            content = "unauthorized",
+                            status = HttpStatusCode.Unauthorized,
+                        )
+                    } else {
+                        jsonResponse(groupJson("grp_retried"))
+                    }
+                }
+                else -> error("Unexpected request: ${request.url}")
+            }
         }
         fixture.model.setSearchType(3)
         fixture.model.setSearchText("reauth")
-        val search = async(start = CoroutineStart.UNDISPATCHED) {
-            fixture.model.refreshSearchList()
-        }
-        requestStarted.await()
 
-        SharedFlowCentre.authed.emit(account)
-        releaseRequest.complete(Unit)
+        assertTrue(fixture.model.refreshSearchList())
 
-        assertTrue(search.await())
+        assertEquals(2, groupRequestCount)
+        assertTrue(authRequestCount > 0)
         assertEquals(listOf("grp_retried"), fixture.model.groupSearchList.value.map { it.id })
         fixture.close()
     }
@@ -516,6 +527,39 @@ private fun MockRequestHandleScope.jsonResponse(content: String) = respond(
 
 private fun groupJson(id: String): String = """
     [{"id":"$id","name":"$id"}]
+""".trimIndent()
+
+private fun currentUserJson(account: AccountDto): String = """
+    {
+      "requiresTwoFactorAuth":null,
+      "ageVerificationStatus":"verified","ageVerified":true,
+      "acceptedPrivacyVersion":0,"acceptedTOSVersion":0,
+      "accountDeletionDate":null,"accountDeletionLog":null,"activeFriends":[],
+      "allowAvatarCopying":true,"bio":null,"bioLinks":[],
+      "currentAvatar":"","currentAvatarAssetUrl":null,"currentAvatarImageUrl":"",
+      "currentAvatarTags":[],"currentAvatarThumbnailImageUrl":"","date_joined":"",
+      "developerType":"none","displayName":"${account.username}","emailVerified":true,
+      "fallbackAvatar":"","friendGroupNames":[],"friendKey":"","friends":[],
+      "googleId":"","hasBirthday":true,"hasEmail":true,
+      "hasLoggedInFromClient":true,"hasPendingEmail":false,
+      "hideContentFilterSettings":false,"homeLocation":"","id":"${account.userId}",
+      "isFriend":false,"last_activity":"","last_login":"",
+      "last_platform":"standalonewindows","obfuscatedEmail":"",
+      "obfuscatedPendingEmail":"","oculusId":"","offlineFriends":[],
+      "onlineFriends":[],"pastDisplayNames":[],"picoId":"",
+      "presence":{
+        "avatarThumbnail":null,"displayName":"${account.username}","groups":[],
+        "id":"${account.userId}","instance":"","instanceType":"",
+        "isRejoining":null,"platform":"standalonewindows","profilePicOverride":null,
+        "status":"active","travelingToInstance":"","travelingToWorld":"","world":""
+      },
+      "profilePicOverride":"","state":"online","status":"active",
+      "statusDescription":"","statusFirstTime":false,"statusHistory":[],
+      "steamDetails":{},"steamId":"","tags":[],"twoFactorAuthEnabled":false,
+      "twoFactorAuthEnabledDate":null,"unsubscribe":false,"updated_at":"",
+      "userIcon":"","userLanguage":null,"userLanguageCode":null,
+      "username":"${account.username}","viveId":"","pronouns":null
+    }
 """.trimIndent()
 
 private fun groupsJson(ids: List<String>): String =
