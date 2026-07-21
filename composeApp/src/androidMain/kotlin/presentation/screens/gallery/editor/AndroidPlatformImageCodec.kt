@@ -42,7 +42,7 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                 val metadata = inspect(bytes)
                 val target = DecodeSizePlanner.plan(metadata.orientedSize, request)
                 val options = BitmapFactory.Options().apply {
-                    inSampleSize = previewSampleSize(
+                    inSampleSize = calculatePreviewSampleSize(
                         metadata.rawSize,
                         metadata.orientation,
                         target,
@@ -427,7 +427,7 @@ private data class ImageMetadata(
     val orientation: Int,
 )
 
-private fun previewSampleSize(
+internal fun calculatePreviewSampleSize(
     rawSize: ImageSize,
     orientation: Int,
     target: ImageSize,
@@ -440,9 +440,9 @@ private fun previewSampleSize(
         val sampledWidth = if (orientation.swapsDimensions()) sampledRawHeight else sampledRawWidth
         val sampledHeight = if (orientation.swapsDimensions()) sampledRawWidth else sampledRawHeight
         val withinPixels = sampledWidth.toLong() * sampledHeight <= request.maxPixels
-        val withinPowerOfTwoTarget = sampledWidth.toLong() <= target.width.toLong() * 2 &&
-                sampledHeight.toLong() <= target.height.toLong() * 2
-        if (withinPixels && withinPowerOfTwoTarget) return sample
+        val withinTargetDimension = maxOf(sampledWidth, sampledHeight) <=
+                maxOf(target.width, target.height)
+        if (withinPixels && withinTargetDimension) return sample
         check(sample <= Int.MAX_VALUE / 2) { "Unable to calculate a bounded sample size" }
         sample *= 2
     }

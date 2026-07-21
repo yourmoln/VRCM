@@ -86,6 +86,47 @@ class AndroidPlatformImageCodecTest {
     }
 
     @Test
+    fun legacyDecodeUsesDefaultPixelBudget() = runBlocking {
+        val png = createEncodedBitmap(4_100, 4_000, Bitmap.CompressFormat.PNG)
+
+        val decoded = codec.decode(png, 5_760)
+        val bitmap = decoded.bitmap.asAndroidBitmap()
+
+        assertEquals(ImageSize(4_100, 4_000), decoded.originalSize)
+        assertTrue(maxOf(bitmap.width, bitmap.height) <= 5_760)
+        assertTrue(
+            bitmap.width.toLong() * bitmap.height <=
+                    PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS,
+        )
+    }
+
+    @Test
+    fun previewSampleBoundsIntermediateBitmapToPlannedSize() {
+        val source = ImageSize(6_000, 1_000)
+        val request = DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L)
+        val target = DecodeSizePlanner.plan(source, request)
+
+        val sample = calculatePreviewSampleSize(
+            rawSize = source,
+            orientation = 1,
+            target = target,
+            request = request,
+        )
+        val sampledSize = ImageSize(
+            width = (source.width + sample - 1) / sample,
+            height = (source.height + sample - 1) / sample,
+        )
+
+        assertEquals(ImageSize(2_048, 341), target)
+        assertEquals(4, sample)
+        assertEquals(ImageSize(1_500, 250), sampledSize)
+        assertTrue(
+            maxOf(sampledSize.width, sampledSize.height) <= maxOf(target.width, target.height),
+        )
+        assertTrue(sampledSize.width.toLong() * sampledSize.height <= request.maxPixels)
+    }
+
+    @Test
     fun previewHonorsRequestPixelBudget() = runBlocking {
         val png = createEncodedBitmap(1_600, 1_200, Bitmap.CompressFormat.PNG)
         val request = DecodeRequest(maxDimension = 2_048, maxPixels = 400_000L)
@@ -139,7 +180,7 @@ class AndroidPlatformImageCodecTest {
 
         val rendered = codec.renderCrop(png, request).asAndroidBitmap()
         val direct = stripeStats(rendered)
-        val preview = codec.decode(png, 2_048).bitmap.asAndroidBitmap()
+        val preview = decodeLegacyFullPreview(png)
         val legacyOutput = renderFromFullPreview(preview, request)
         val legacy = stripeStats(legacyOutput)
 
@@ -300,6 +341,21 @@ private fun renderFromFullPreview(preview: Bitmap, request: CropRenderRequest): 
         Bitmap.Config.ARGB_8888,
     ).also { output ->
         Canvas(output).drawBitmap(preview, matrix, Paint(Paint.FILTER_BITMAP_FLAG))
+    }
+}
+
+private fun decodeLegacyFullPreview(bytes: ByteArray): Bitmap {
+    val sampled = BitmapFactory.decodeByteArray(
+        bytes,
+        0,
+        bytes.size,
+        BitmapFactory.Options().apply {
+            inSampleSize = 2
+            inPreferredConfig = Bitmap.Config.ARGB_8888
+        },
+    ) ?: error("Unable to decode legacy preview fixture")
+    return Bitmap.createScaledBitmap(sampled, 1_024, 2_048, true).also {
+        if (it !== sampled) sampled.recycle()
     }
 }
 
