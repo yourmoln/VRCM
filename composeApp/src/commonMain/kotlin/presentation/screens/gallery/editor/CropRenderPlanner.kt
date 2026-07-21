@@ -48,25 +48,30 @@ class CropRenderPlanner(
         source: ImageSize,
         output: ImageSize,
     ): PixelRect {
-        val determinant = transform.scaleX * transform.scaleY - transform.skewX * transform.skewY
+        val scaleX = transform.scaleX.toDouble()
+        val skewX = transform.skewX.toDouble()
+        val translateX = transform.translateX.toDouble()
+        val skewY = transform.skewY.toDouble()
+        val scaleY = transform.scaleY.toDouble()
+        val translateY = transform.translateY.toDouble()
+        val determinant = scaleX * scaleY - skewX * skewY
         val outputCorners = listOf(
-            FloatPoint(0f, 0f),
-            FloatPoint(output.width.toFloat(), 0f),
-            FloatPoint(0f, output.height.toFloat()),
-            FloatPoint(output.width.toFloat(), output.height.toFloat()),
+            0.0 to 0.0,
+            output.width.toDouble() to 0.0,
+            0.0 to output.height.toDouble(),
+            output.width.toDouble() to output.height.toDouble(),
         )
         val sourceCorners = outputCorners.map { point ->
-            val translatedX = point.x - transform.translateX
-            val translatedY = point.y - transform.translateY
-            FloatPoint(
-                x = (transform.scaleY * translatedX - transform.skewX * translatedY) / determinant,
-                y = (-transform.skewY * translatedX + transform.scaleX * translatedY) / determinant,
-            )
+            val translatedX = point.first - translateX
+            val translatedY = point.second - translateY
+            val sourceX = (scaleY * translatedX - skewX * translatedY) / determinant
+            val sourceY = (-skewY * translatedX + scaleX * translatedY) / determinant
+            sourceX to sourceY
         }
-        val left = floor(sourceCorners.minOf { it.x }).toInt().coerceIn(0, source.width)
-        val top = floor(sourceCorners.minOf { it.y }).toInt().coerceIn(0, source.height)
-        val right = ceil(sourceCorners.maxOf { it.x }).toInt().coerceIn(0, source.width)
-        val bottom = ceil(sourceCorners.maxOf { it.y }).toInt().coerceIn(0, source.height)
+        val left = floor(sourceCorners.minOf { it.first }).toInt().coerceIn(0, source.width)
+        val top = floor(sourceCorners.minOf { it.second }).toInt().coerceIn(0, source.height)
+        val right = ceil(sourceCorners.maxOf { it.first }).toInt().coerceIn(0, source.width)
+        val bottom = ceil(sourceCorners.maxOf { it.second }).toInt().coerceIn(0, source.height)
         val horizontal = nonEmptyRange(left, right, source.width)
         val vertical = nonEmptyRange(top, bottom, source.height)
         return PixelRect(horizontal.first, vertical.first, horizontal.second, vertical.second)

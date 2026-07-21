@@ -2,6 +2,7 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery.editor
 
 import kotlin.math.ceil
 import kotlin.math.floor
+import kotlin.math.roundToInt
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -90,11 +91,10 @@ class CropRenderPlannerTest {
         val geometry = calculator.geometry(source, output, transform)
 
         val plan = planner.plan(CropRenderRequest(source, transform, output))
-        val expectedBounds = visibleSourceBoundsLikePreview(
+        val expectedBounds = visibleSourceBoundsFromReturnedAffine(
+            transform = plan.sourceToOutput,
             source = source,
             output = output,
-            transform = transform,
-            geometry = geometry,
         )
 
         assertPointEquals(
@@ -104,7 +104,7 @@ class CropRenderPlannerTest {
             ),
             actual = plan.sourceToOutput.map(source.width / 2f, source.height / 2f),
         )
-        assertEquals(PixelRect(1_390, 333, 2_329, 2_001), expectedBounds)
+        assertEquals(PixelRect(1_390, 333, 2_329, 2_000), expectedBounds)
         assertEquals(expectedBounds, plan.visibleSourceBounds)
         assertInsideSource(plan.visibleSourceBounds, source)
     }
@@ -155,11 +155,10 @@ class CropRenderPlannerTest {
         val maxTranslationY = (geometry.imageHeight - output.height) / 2f
 
         val plan = planner.plan(CropRenderRequest(source, transform, output))
-        val expectedBounds = visibleSourceBoundsLikePreview(
+        val expectedBounds = visibleSourceBoundsFromReturnedAffine(
+            transform = plan.sourceToOutput,
             source = source,
             output = output,
-            transform = transform,
-            geometry = geometry,
         )
 
         assertEquals(maxTranslationX, geometry.translationX, 0.01f)
@@ -171,11 +170,102 @@ class CropRenderPlannerTest {
             ),
             actual = plan.sourceToOutput.map(source.width / 2f, source.height / 2f),
         )
-        assertEquals(PixelRect(5_100, 0, 6_000, 1_600), expectedBounds)
+        assertEquals(PixelRect(5_099, 0, 6_000, 1_600), expectedBounds)
         assertEquals(expectedBounds, plan.visibleSourceBounds)
         assertInsideSource(plan.visibleSourceBounds, source)
         assertTrue(plan.visibleSourceBounds.width > 0)
         assertTrue(plan.visibleSourceBounds.height > 0)
+    }
+
+    @Test
+    fun centeredQuarterTurnKeepsExclusiveRightConservativeForDoubleInverse() {
+        val source = ImageSize(6_000, 4_000)
+        val output = ImageSize(1_920, 1_080)
+        val plan = planner.plan(
+            CropRenderRequest(
+                originalSize = source,
+                transform = CropTransform(quarterTurns = 1),
+                outputSize = output,
+            ),
+        )
+
+        assertEquals(PixelRect(1_875, 0, 4_126, 4_000), plan.visibleSourceBounds)
+        val exclusiveRightCorner = inverseUsingDouble(
+            plan.sourceToOutput,
+            DoublePoint(0.0, output.height.toDouble()),
+        )
+        assertTrue(exclusiveRightCorner.x > 4_125.0)
+        assertTrue(exclusiveRightCorner.x <= plan.visibleSourceBounds.right)
+        assertOutputSamplesCoveredByBounds(plan, source, output)
+    }
+
+    @Test
+    fun maximumLegalPixelCountKeepsDoubleInverseCornersCovered() {
+        val source = ImageSize(100_000_000, 1)
+        val output = ImageSize(1_920, 1_080)
+        val plan = planner.plan(CropRenderRequest(source, CropTransform(), output))
+
+        assertEquals(
+            visibleSourceBoundsFromReturnedAffine(plan.sourceToOutput, source, output),
+            plan.visibleSourceBounds,
+        )
+        assertOutputSamplesCoveredByBounds(plan, source, output)
+        assertInsideSource(plan.visibleSourceBounds, source)
+    }
+
+    @Test
+    fun everyQuarterTurnAndFlipCombinationConservativelyCoversOutputSamples() {
+        val source = ImageSize(3_973, 2_819)
+        val output = ImageSize(1_920, 1_080)
+
+        for (turns in 0..3) {
+            for (flipHorizontal in listOf(false, true)) {
+                for (flipVertical in listOf(false, true)) {
+                    val plan = planner.plan(
+                        CropRenderRequest(
+                            originalSize = source,
+                            transform = CropTransform(
+                                centerOffsetX = 0.07f,
+                                centerOffsetY = -0.04f,
+                                zoom = 1.7f,
+                                quarterTurns = turns,
+                                flipHorizontal = flipHorizontal,
+                                flipVertical = flipVertical,
+                            ),
+                            outputSize = output,
+                        ),
+                    )
+
+                    assertEquals(
+                        visibleSourceBoundsFromReturnedAffine(plan.sourceToOutput, source, output),
+                        plan.visibleSourceBounds,
+                        "turns=$turns, flipHorizontal=$flipHorizontal, flipVertical=$flipVertical",
+                    )
+                    assertOutputSamplesCoveredByBounds(plan, source, output)
+                    assertInsideSource(plan.visibleSourceBounds, source)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun continuousAffineCenterParityAllowsHalfPixelRoundingAndFloatEpsilon() {
+        val source = ImageSize(3_973, 2_819)
+        val output = ImageSize(1_920, 1_080)
+        val transform = CropTransform(
+            centerOffsetX = 0.07f,
+            centerOffsetY = -0.04f,
+            zoom = 1.37f,
+            quarterTurns = 1,
+            flipHorizontal = true,
+        )
+        val geometry = calculator.geometry(source, output, transform)
+        val plan = planner.plan(CropRenderRequest(source, transform, output))
+        val roundedPreviewCenter = mapCenterLikeRoundedPreview(output, transform, geometry)
+        val affineCenter = plan.sourceToOutput.map(source.width / 2f, source.height / 2f)
+
+        assertEquals(roundedPreviewCenter.x, affineCenter.x, PREVIEW_ROUNDING_TOLERANCE)
+        assertEquals(roundedPreviewCenter.y, affineCenter.y, PREVIEW_ROUNDING_TOLERANCE)
     }
 
     private fun mapLikePreview(
@@ -202,21 +292,12 @@ class CropRenderPlannerTest {
         )
     }
 
-    private fun visibleSourceBoundsLikePreview(
+    private fun visibleSourceBoundsFromReturnedAffine(
+        transform: AffineTransform,
         source: ImageSize,
         output: ImageSize,
-        transform: CropTransform,
-        geometry: RenderGeometry,
     ): PixelRect {
-        val previewTransform = affineLikePreview(source, output, transform, geometry)
-        val sourceCorners = listOf(
-            FloatPoint(0f, 0f),
-            FloatPoint(output.width.toFloat(), 0f),
-            FloatPoint(0f, output.height.toFloat()),
-            FloatPoint(output.width.toFloat(), output.height.toFloat()),
-        ).map { point ->
-            mapOutputToSourceLikePreview(point, previewTransform)
-        }
+        val sourceCorners = outputCorners(output).map { point -> inverseUsingDouble(transform, point) }
         return PixelRect(
             left = floor(sourceCorners.minOf { it.x }).toInt().coerceIn(0, source.width),
             top = floor(sourceCorners.minOf { it.y }).toInt().coerceIn(0, source.height),
@@ -225,50 +306,79 @@ class CropRenderPlannerTest {
         )
     }
 
-    private fun affineLikePreview(
+    private fun assertOutputSamplesCoveredByBounds(
+        plan: CropRenderPlan,
         source: ImageSize,
         output: ImageSize,
-        transform: CropTransform,
-        geometry: RenderGeometry,
-    ): AffineTransform {
-        val origin = mapLikePreview(FloatPoint(0f, 0f), source, output, transform, geometry)
-        val right = mapLikePreview(
-            FloatPoint(source.width.toFloat(), 0f),
-            source,
-            output,
-            transform,
-            geometry,
-        )
-        val bottom = mapLikePreview(
-            FloatPoint(0f, source.height.toFloat()),
-            source,
-            output,
-            transform,
-            geometry,
-        )
-        return AffineTransform(
-            scaleX = (right.x - origin.x) / source.width,
-            skewX = (bottom.x - origin.x) / source.height,
-            translateX = origin.x,
-            skewY = (right.y - origin.y) / source.width,
-            scaleY = (bottom.y - origin.y) / source.height,
-            translateY = origin.y,
+    ) {
+        val bounds = plan.visibleSourceBounds
+        val outputSamples = outputCorners(output) +
+                DoublePoint(output.width / 2.0, output.height / 2.0)
+        outputSamples
+            .map { point -> inverseUsingDouble(plan.sourceToOutput, point) }
+            .forEach { point ->
+                val clampedPoint = DoublePoint(
+                    x = point.x.coerceIn(0.0, source.width.toDouble()),
+                    y = point.y.coerceIn(0.0, source.height.toDouble()),
+                )
+                assertTrue(
+                    actual = clampedPoint.x >= bounds.left && clampedPoint.x <= bounds.right,
+                    message = "Inverse x=${clampedPoint.x} is outside $bounds",
+                )
+                assertTrue(
+                    actual = clampedPoint.y >= bounds.top && clampedPoint.y <= bounds.bottom,
+                    message = "Inverse y=${clampedPoint.y} is outside $bounds",
+                )
+            }
+    }
+
+    private fun inverseUsingDouble(
+        transform: AffineTransform,
+        point: DoublePoint,
+    ): DoublePoint {
+        val scaleX = transform.scaleX.toDouble()
+        val skewX = transform.skewX.toDouble()
+        val translateX = transform.translateX.toDouble()
+        val skewY = transform.skewY.toDouble()
+        val scaleY = transform.scaleY.toDouble()
+        val translateY = transform.translateY.toDouble()
+        val determinant = scaleX * scaleY - skewX * skewY
+        val translatedX = point.x - translateX
+        val translatedY = point.y - translateY
+        return DoublePoint(
+            x = (scaleY * translatedX - skewX * translatedY) / determinant,
+            y = (-skewY * translatedX + scaleX * translatedY) / determinant,
         )
     }
 
-    private fun mapOutputToSourceLikePreview(
-        point: FloatPoint,
-        previewTransform: AffineTransform,
+    private fun outputCorners(output: ImageSize): List<DoublePoint> = listOf(
+        DoublePoint(0.0, 0.0),
+        DoublePoint(output.width.toDouble(), 0.0),
+        DoublePoint(0.0, output.height.toDouble()),
+        DoublePoint(output.width.toDouble(), output.height.toDouble()),
+    )
+
+    private fun mapCenterLikeRoundedPreview(
+        output: ImageSize,
+        transform: CropTransform,
+        geometry: RenderGeometry,
     ): FloatPoint {
-        val translatedX = point.x - previewTransform.translateX
-        val translatedY = point.y - previewTransform.translateY
-        val determinant = previewTransform.scaleX * previewTransform.scaleY -
-                previewTransform.skewX * previewTransform.skewY
+        val turns = ((transform.quarterTurns % 4) + 4) % 4
+        val unrotatedWidth = if (turns % 2 == 0) geometry.imageWidth else geometry.imageHeight
+        val unrotatedHeight = if (turns % 2 == 0) geometry.imageHeight else geometry.imageWidth
+        val localX = (-unrotatedWidth / 2f).roundToInt() + unrotatedWidth.roundToInt() / 2f
+        val localY = (-unrotatedHeight / 2f).roundToInt() + unrotatedHeight.roundToInt() / 2f
+        val flippedX = localX * geometry.scaleXSign
+        val flippedY = localY * geometry.scaleYSign
+        val rotated = when (turns) {
+            0 -> FloatPoint(flippedX, flippedY)
+            1 -> FloatPoint(-flippedY, flippedX)
+            2 -> FloatPoint(-flippedX, -flippedY)
+            else -> FloatPoint(flippedY, -flippedX)
+        }
         return FloatPoint(
-            x = (previewTransform.scaleY * translatedX -
-                    previewTransform.skewX * translatedY) / determinant,
-            y = (-previewTransform.skewY * translatedX +
-                    previewTransform.scaleX * translatedY) / determinant,
+            x = output.width / 2f + geometry.translationX + rotated.x,
+            y = output.height / 2f + geometry.translationY + rotated.y,
         )
     }
 
@@ -284,5 +394,14 @@ class CropRenderPlannerTest {
     private fun assertPointEquals(expected: FloatPoint, actual: FloatPoint) {
         assertEquals(expected.x, actual.x, 0.01f)
         assertEquals(expected.y, actual.y, 0.01f)
+    }
+
+    private data class DoublePoint(
+        val x: Double,
+        val y: Double,
+    )
+
+    private companion object {
+        const val PREVIEW_ROUNDING_TOLERANCE = 0.501f
     }
 }
