@@ -9,6 +9,7 @@ import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
@@ -131,10 +132,14 @@ class PrintImageEditorScreenModelTest {
         val processor = FakePrintImageProcessor { _, _, _ -> Result.failure(fatal) }
         val uploader = FakePrintUploader { _, _ -> Result.success(PrintData("unused")) }
         var uncaught: Throwable? = null
-        val workerContext = Dispatchers.Unconfined + CoroutineExceptionHandler { _, cause ->
+        val workerExceptionHandler = CoroutineExceptionHandler { _, cause ->
             uncaught = cause
         }
-        val model = createModel(processor, uploader, workerContext = workerContext)
+        val model = createModel(
+            processor,
+            uploader,
+            workerExceptionHandler = workerExceptionHandler,
+        )
 
         model.upload()
         yield()
@@ -194,7 +199,7 @@ class PrintImageEditorScreenModelTest {
             uploader = FakePrintUploader { _, _ -> Result.success(PrintData("print")) },
             sessionId = sessionId,
             sessionStore = store,
-            workerContext = Dispatchers.Unconfined,
+            workerDispatcher = Dispatchers.Unconfined,
         )
 
         model.onDispose()
@@ -219,7 +224,8 @@ class PrintImageEditorScreenModelTest {
         processor: PrintImageProcessor,
         uploader: PrintUploader,
         originalSize: ImageSize = ImageSize(1_920, 1_080),
-        workerContext: kotlin.coroutines.CoroutineContext = Dispatchers.Unconfined,
+        workerDispatcher: CoroutineDispatcher = Dispatchers.Unconfined,
+        workerExceptionHandler: CoroutineExceptionHandler? = null,
     ) = PrintImageEditorScreenModel(
         source = SelectedImage("source.jpg", byteArrayOf(1)),
         prepared = PreparedImage(TestImageBitmap, originalSize),
@@ -228,7 +234,8 @@ class PrintImageEditorScreenModelTest {
         uploader = uploader,
         sessionId = "test-session",
         sessionStore = PrintImageEditorSessionStore(),
-        workerContext = workerContext,
+        workerDispatcher = workerDispatcher,
+        workerExceptionHandler = workerExceptionHandler,
         nowMillis = { 123L },
     )
 

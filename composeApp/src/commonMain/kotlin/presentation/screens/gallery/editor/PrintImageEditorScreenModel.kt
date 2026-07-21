@@ -6,6 +6,8 @@ import io.github.vrcmteam.vrcm.service.PrintUploader
 import io.github.vrcmteam.vrcm.service.PrintUploadFailure
 import io.github.vrcmteam.vrcm.service.toPrintUploadFailure
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -15,9 +17,9 @@ import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlin.coroutines.CoroutineContext
 import kotlin.time.Clock
 import kotlin.time.ExperimentalTime
-import kotlin.coroutines.CoroutineContext
 
 enum class EditorPhase {
     Ready,
@@ -57,7 +59,8 @@ class PrintImageEditorScreenModel(
     private val uploader: PrintUploader,
     private val sessionId: String,
     private val sessionStore: PrintImageEditorSessionStore,
-    private val workerContext: CoroutineContext = Dispatchers.Default,
+    private val workerDispatcher: CoroutineDispatcher = Dispatchers.Default,
+    private val workerExceptionHandler: CoroutineExceptionHandler? = null,
     private val nowMillis: () -> Long = { Clock.System.now().toEpochMilliseconds() },
 ) : ScreenModel {
     private val _state = MutableStateFlow(PrintImageEditorState(prepared = prepared))
@@ -136,7 +139,7 @@ class PrintImageEditorScreenModel(
             phase = if (existingPng == null) EditorPhase.Processing else EditorPhase.Uploading,
             error = null,
         )
-        screenModelScope.launch(workerContext) {
+        screenModelScope.launch(workerContext()) {
             var stage = if (existingPng == null) UploadStage.Processing else UploadStage.Uploading
             try {
                 val png = existingPng ?: processor.render(
@@ -175,6 +178,9 @@ class PrintImageEditorScreenModel(
             }
         }
     }
+
+    private fun workerContext(): CoroutineContext =
+        workerExceptionHandler?.let(workerDispatcher::plus) ?: workerDispatcher
 
     private inline fun edit(updateTransform: (PrintImageEditorState) -> CropTransform) {
         val current = _state.value

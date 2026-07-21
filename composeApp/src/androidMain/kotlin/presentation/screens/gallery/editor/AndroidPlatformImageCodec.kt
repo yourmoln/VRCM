@@ -14,7 +14,10 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asAndroidBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.exifinterface.media.ExifInterface
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
@@ -30,8 +33,10 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
         withContext(Dispatchers.IO) {
             require(request.maxDimension > 0) { "maxDimension must be positive" }
             require(request.maxPixels > 0) { "maxPixels must be positive" }
-            try {
+            val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
+            mapAndroidImageFailure(AndroidFailureOperation.DECODE) {
                 val metadata = inspect(bytes)
+                coroutineContext.ensureActive()
                 val target = DecodeSizePlanner.plan(metadata.orientedSize, request)
                 val options = BitmapFactory.Options().apply {
                     inSampleSize = calculatePreviewSampleSize(
@@ -42,30 +47,44 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                     )
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 }
-                val decoded = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
+                coroutineContext.ensureActive()
+                var ownedBitmap: Bitmap? = BitmapFactory.decodeByteArray(bytes, 0, bytes.size, options)
                     ?: throw PrintImageFailure.UnsupportedFormat()
-                val oriented = applyOrientation(decoded, metadata.orientation)
-                val scaled = scaleDown(oriented, target)
-
-                DecodedImage(
-                    bitmap = scaled.asImageBitmap(),
-                    originalSize = metadata.orientedSize,
-                )
-            } catch (failure: PrintImageFailure) {
-                throw failure
-            } catch (cause: Throwable) {
-                throw PrintImageFailure.DecodeFailed(cause)
+                try {
+                    coroutineContext.ensureActive()
+                    ownedBitmap = applyOrientation(
+                        requireNotNull(ownedBitmap),
+                        metadata.orientation,
+                    )
+                    coroutineContext.ensureActive()
+                    ownedBitmap = scaleDown(requireNotNull(ownedBitmap), target)
+                    coroutineContext.ensureActive()
+                    val bitmap = handoffAndroidImageBitmap(
+                        requireNotNull(ownedBitmap).asImageBitmap(),
+                    ) {
+                        coroutineContext.ensureActive()
+                    }
+                    ownedBitmap = null
+                    DecodedImage(
+                        bitmap = bitmap,
+                        originalSize = metadata.orientedSize,
+                    )
+                } finally {
+                    ownedBitmap?.recycleIfNeeded()
+                }
             }
         }
 
     override suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
         withContext(Dispatchers.IO) {
-            try {
+            val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
+            mapAndroidImageFailure(AndroidFailureOperation.RENDER) {
                 val format = bytes.detectFormat() ?: throw PrintImageFailure.UnsupportedFormat()
                 if (format == ImageFormat.HEIF && Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
                     throw PrintImageFailure.UnsupportedFormat()
                 }
                 val metadata = inspect(bytes, format)
+                coroutineContext.ensureActive()
                 if (metadata.orientedSize != request.originalSize) {
                     throw PrintImageFailure.RenderFailed(
                         IllegalArgumentException(
@@ -75,37 +94,39 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                     )
                 }
                 val plan = CropRenderPlanner().plan(request)
-                val rendered = if (metadata.format == ImageFormat.HEIF) {
+                coroutineContext.ensureActive()
+                var rendered: Bitmap? = if (metadata.format == ImageFormat.HEIF) {
                     renderHeifCrop(bytes, metadata, plan)
                 } else {
                     renderRegionCrop(bytes, metadata, plan)
                 }
                 try {
-                    rendered.asImageBitmap()
-                } catch (cause: Throwable) {
-                    rendered.recycle()
-                    throw cause
+                    coroutineContext.ensureActive()
+                    val bitmap = handoffAndroidImageBitmap(
+                        requireNotNull(rendered).asImageBitmap(),
+                    ) {
+                        coroutineContext.ensureActive()
+                    }
+                    rendered = null
+                    bitmap
+                } finally {
+                    rendered?.recycleIfNeeded()
                 }
-            } catch (failure: PrintImageFailure) {
-                throw failure
-            } catch (cause: Throwable) {
-                throw PrintImageFailure.RenderFailed(cause)
             }
         }
 
     override suspend fun encodePng(bitmap: ImageBitmap): ByteArray =
         withContext(Dispatchers.IO) {
-            try {
-                ByteArrayOutputStream().use { output ->
+            val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
+            mapAndroidImageFailure(AndroidFailureOperation.ENCODE) {
+                val bytes = ByteArrayOutputStream().use { output ->
                     if (!bitmap.asAndroidBitmap().compress(Bitmap.CompressFormat.PNG, 100, output)) {
                         throw PrintImageFailure.EncodeFailed()
                     }
                     output.toByteArray()
                 }
-            } catch (failure: PrintImageFailure) {
-                throw failure
-            } catch (cause: Throwable) {
-                throw PrintImageFailure.EncodeFailed(cause)
+                coroutineContext.ensureActive()
+                bytes
             }
         }
 
@@ -163,13 +184,16 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
             }
         }
         if (matrix.isIdentity) return source
-        return try {
-            Bitmap.createBitmap(source, 0, 0, source.width, source.height, matrix, true).also {
-                if (it !== source) source.recycle()
-            }
-        } catch (cause: Throwable) {
-            source.recycle()
-            throw cause
+        return Bitmap.createBitmap(
+            source,
+            0,
+            0,
+            source.width,
+            source.height,
+            matrix,
+            true,
+        ).also {
+            if (it !== source) source.recycleIfNeeded()
         }
     }
 
@@ -187,18 +211,13 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                 height = (source.height * scale).roundToInt().coerceAtLeast(1),
             )
         }
-        return try {
-            Bitmap.createScaledBitmap(
-                source,
-                outputSize.width,
-                outputSize.height,
-                true,
-            ).also {
-                if (it !== source) source.recycle()
-            }
-        } catch (cause: Throwable) {
-            source.recycle()
-            throw cause
+        return Bitmap.createScaledBitmap(
+            source,
+            outputSize.width,
+            outputSize.height,
+            true,
+        ).also {
+            if (it !== source) source.recycleIfNeeded()
         }
     }
 
@@ -307,6 +326,7 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
             outputSize.height,
             Bitmap.Config.ARGB_8888,
         )
+        var handedOff = false
         try {
             val matrix = Matrix().apply {
                 setValues(
@@ -327,10 +347,10 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
                 Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG or Paint.DITHER_FLAG,
             )
             Canvas(output).drawBitmap(source, matrix, paint)
+            handedOff = true
             return output
-        } catch (cause: Throwable) {
-            output.recycle()
-            throw cause
+        } finally {
+            if (!handedOff) output.recycleIfNeeded()
         }
     }
 
@@ -439,6 +459,69 @@ private data class ImageMetadata(
     val orientedSize: ImageSize,
     val orientation: Int,
 )
+
+internal inline fun handoffAndroidImageBitmap(
+    bitmap: ImageBitmap,
+    checkCancellation: () -> Unit,
+): ImageBitmap = try {
+    checkCancellation()
+    bitmap
+} catch (cause: CancellationException) {
+    releaseAndroidImageBitmapAfterFailure(bitmap, cause)
+    throw cause
+} catch (cause: Exception) {
+    releaseAndroidImageBitmapAfterFailure(bitmap, cause)
+    throw cause
+} catch (cause: Error) {
+    releaseAndroidImageBitmapAfterFailure(bitmap, cause)
+    throw cause
+}
+
+private fun releaseAndroidImageBitmapAfterFailure(
+    bitmap: ImageBitmap,
+    primaryFailure: Throwable,
+) {
+    try {
+        releasePlatformImageBitmap(bitmap)
+    } catch (releaseFailure: CancellationException) {
+        primaryFailure.addAndroidReleaseFailure(releaseFailure)
+    } catch (releaseFailure: Exception) {
+        primaryFailure.addAndroidReleaseFailure(releaseFailure)
+    } catch (releaseFailure: Error) {
+        primaryFailure.addAndroidReleaseFailure(releaseFailure)
+    }
+}
+
+private fun Throwable.addAndroidReleaseFailure(releaseFailure: Throwable) {
+    if (releaseFailure !== this) addSuppressed(releaseFailure)
+}
+
+internal enum class AndroidFailureOperation {
+    DECODE,
+    RENDER,
+    ENCODE,
+}
+
+internal inline fun <T> mapAndroidImageFailure(
+    operation: AndroidFailureOperation,
+    block: () -> T,
+): T = try {
+    block()
+} catch (cause: CancellationException) {
+    throw cause
+} catch (failure: PrintImageFailure) {
+    throw failure
+} catch (cause: Exception) {
+    throw when (operation) {
+        AndroidFailureOperation.DECODE -> PrintImageFailure.DecodeFailed(cause)
+        AndroidFailureOperation.RENDER -> PrintImageFailure.RenderFailed(cause)
+        AndroidFailureOperation.ENCODE -> PrintImageFailure.EncodeFailed(cause)
+    }
+}
+
+private fun Bitmap.recycleIfNeeded() {
+    if (!isRecycled) recycle()
+}
 
 internal fun calculatePreviewSampleSize(
     rawSize: ImageSize,

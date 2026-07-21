@@ -9,6 +9,8 @@ import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.Rect
 import androidx.compose.ui.graphics.asAndroidBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.runBlocking
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -22,6 +24,7 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 @RunWith(RobolectricTestRunner::class)
@@ -29,6 +32,45 @@ import kotlin.test.assertTrue
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 class AndroidPlatformImageCodecTest {
     private val codec = AndroidPlatformImageCodec()
+
+    @Test
+    fun cancellationsAreNotMappedToRecoverableImageFailures() {
+        AndroidFailureOperation.entries.forEach { operation ->
+            val cancellation = CancellationException("cancelled-$operation")
+
+            val thrown = assertFailsWith<CancellationException> {
+                mapAndroidImageFailure(operation) { throw cancellation }
+            }
+
+            assertSame(cancellation, thrown)
+        }
+    }
+
+    @Test
+    fun fatalErrorsAreNotMappedToRecoverableImageFailures() {
+        AndroidFailureOperation.entries.forEach { operation ->
+            val fatal = AssertionError("fatal-$operation")
+
+            val thrown = assertFailsWith<AssertionError> {
+                mapAndroidImageFailure(operation) { throw fatal }
+            }
+
+            assertSame(fatal, thrown)
+        }
+    }
+
+    @Test
+    fun cancelledImageBitmapHandoffRecyclesOwnedPixels() {
+        val cancellation = CancellationException("cancelled")
+        val androidBitmap = Bitmap.createBitmap(12, 7, Bitmap.Config.ARGB_8888)
+
+        val thrown = assertFailsWith<CancellationException> {
+            handoffAndroidImageBitmap(androidBitmap.asImageBitmap()) { throw cancellation }
+        }
+
+        assertSame(cancellation, thrown)
+        assertTrue(androidBitmap.isRecycled)
+    }
 
     @Test
     fun pngRoundTripPreservesDimensions() = runBlocking {

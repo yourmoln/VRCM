@@ -24,6 +24,7 @@ class DefaultPrintImageProcessor(
     private val spec: PrintCanvasSpec = PrintCanvasSpec(),
     private val maxFileBytes: Int = PrintImageLimits.MAX_FILE_BYTES.toInt(),
     private val maxPixels: Long = PrintImageLimits.MAX_PIXELS,
+    private val releaseBitmap: (ImageBitmap) -> Unit = ::releasePlatformImageBitmap,
 ) : PrintImageProcessor {
     override suspend fun prepare(source: SelectedImage): Result<PreparedImage> = try {
         validateSource(source)
@@ -51,16 +52,20 @@ class DefaultPrintImageProcessor(
         validateSource(source)
         validateDimensions(originalSize)
         val content = renderCrop(source.bytes, originalSize, transform)
-        if (content.width != spec.contentWidth || content.height != spec.contentHeight) {
-            throw PrintImageFailure.RenderFailed(
-                IllegalStateException(
-                    "Crop renderer returned ${content.width}x${content.height}; expected " +
-                            "${spec.contentWidth}x${spec.contentHeight}",
-                ),
-            )
+        val bytes = useOwnedBitmap(content) {
+            if (content.width != spec.contentWidth || content.height != spec.contentHeight) {
+                throw PrintImageFailure.RenderFailed(
+                    IllegalStateException(
+                        "Crop renderer returned ${content.width}x${content.height}; expected " +
+                                "${spec.contentWidth}x${spec.contentHeight}",
+                    ),
+                )
+            }
+            val output = renderCanvas(content)
+            useOwnedBitmap(output) {
+                encodePng(output)
+            }
         }
-        val output = renderCanvas(content)
-        val bytes = encodePng(output)
         if (!hasExpectedPngHeader(bytes, spec.canvasWidth, spec.canvasHeight)) {
             throw PrintImageFailure.EncodeFailed()
         }
@@ -120,24 +125,78 @@ class DefaultPrintImageProcessor(
         throw PrintImageFailure.EncodeFailed(cause)
     }
 
+    private suspend inline fun <T> useOwnedBitmap(
+        bitmap: ImageBitmap,
+        block: suspend (ImageBitmap) -> T,
+    ): T {
+        val result = try {
+            block(bitmap)
+        } catch (cause: CancellationException) {
+            releaseAfterFailure(bitmap, cause)
+            throw cause
+        } catch (cause: Exception) {
+            releaseAfterFailure(bitmap, cause)
+            throw cause
+        } catch (cause: Error) {
+            releaseAfterFailure(bitmap, cause)
+            throw cause
+        }
+        releaseBitmap(bitmap)
+        return result
+    }
+
+    private fun releaseAfterFailure(bitmap: ImageBitmap, primaryFailure: Throwable) {
+        try {
+            releaseBitmap(bitmap)
+        } catch (releaseFailure: CancellationException) {
+            primaryFailure.addReleaseFailure(releaseFailure)
+        } catch (releaseFailure: Exception) {
+            primaryFailure.addReleaseFailure(releaseFailure)
+        } catch (releaseFailure: Error) {
+            primaryFailure.addReleaseFailure(releaseFailure)
+        }
+    }
+
+    private fun Throwable.addReleaseFailure(releaseFailure: Throwable) {
+        if (releaseFailure !== this) addSuppressed(releaseFailure)
+    }
+
+    private inline fun <T> handoffOwnedBitmap(
+        bitmap: ImageBitmap,
+        block: (ImageBitmap) -> T,
+    ): T = try {
+        block(bitmap)
+    } catch (cause: CancellationException) {
+        releaseAfterFailure(bitmap, cause)
+        throw cause
+    } catch (cause: Exception) {
+        releaseAfterFailure(bitmap, cause)
+        throw cause
+    } catch (cause: Error) {
+        releaseAfterFailure(bitmap, cause)
+        throw cause
+    }
+
     private fun renderCanvas(content: ImageBitmap): ImageBitmap = try {
         val output = ImageBitmap(
             width = spec.canvasWidth,
             height = spec.canvasHeight,
             hasAlpha = false,
         )
-        val canvas = Canvas(output)
-        canvas.drawRect(
-            rect = Rect(0f, 0f, spec.canvasWidth.toFloat(), spec.canvasHeight.toFloat()),
-            paint = Paint().apply { color = Color.White },
-        )
-        canvas.drawImageRect(
-            image = content,
-            dstOffset = IntOffset(spec.contentOffsetX, spec.contentOffsetY),
-            dstSize = IntSize(spec.contentWidth, spec.contentHeight),
-            paint = Paint(),
-        )
-        output
+        handoffOwnedBitmap(output) {
+            val canvas = Canvas(output)
+            canvas.drawRect(
+                rect = Rect(0f, 0f, spec.canvasWidth.toFloat(), spec.canvasHeight.toFloat()),
+                paint = Paint().apply { color = Color.White },
+            )
+            canvas.drawImageRect(
+                image = content,
+                dstOffset = IntOffset(spec.contentOffsetX, spec.contentOffsetY),
+                dstSize = IntSize(spec.contentWidth, spec.contentHeight),
+                paint = Paint(),
+            )
+            output
+        }
     } catch (failure: PrintImageFailure) {
         throw failure
     } catch (cause: Exception) {
