@@ -183,15 +183,23 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
 
     private fun scaleDown(source: Bitmap, target: ImageSize): Bitmap {
         if (source.width <= target.width && source.height <= target.height) return source
-        val scale = min(
-            target.width.toDouble() / source.width,
-            target.height.toDouble() / source.height,
-        ).coerceAtMost(1.0)
+        val outputSize = if (source.width >= target.width && source.height >= target.height) {
+            target
+        } else {
+            val scale = min(
+                target.width.toDouble() / source.width,
+                target.height.toDouble() / source.height,
+            ).coerceAtMost(1.0)
+            ImageSize(
+                width = (source.width * scale).roundToInt().coerceAtLeast(1),
+                height = (source.height * scale).roundToInt().coerceAtLeast(1),
+            )
+        }
         return try {
             Bitmap.createScaledBitmap(
                 source,
-                (source.width * scale).roundToInt().coerceAtLeast(1),
-                (source.height * scale).roundToInt().coerceAtLeast(1),
+                outputSize.width,
+                outputSize.height,
                 true,
             ).also {
                 if (it !== source) source.recycle()
@@ -212,15 +220,17 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
         var regionBitmap: Bitmap? = null
         try {
             val rawToOriented = rawToOriented(metadata.rawSize, metadata.orientation)
+            val sampleSize = cropSampleSize(plan.sourceToOutput)
             val rawBounds = rawRegionBounds(
                 orientedBounds = plan.visibleSourceBounds,
                 orientedToRaw = rawToOriented.inverse(),
                 rawSize = metadata.rawSize,
+                halo = sampleSize,
             )
             regionBitmap = decoder.decodeRegion(
                 rawBounds.toAndroidRect(),
                 BitmapFactory.Options().apply {
-                    inSampleSize = cropSampleSize(plan.sourceToOutput)
+                    inSampleSize = sampleSize
                     inPreferredConfig = Bitmap.Config.ARGB_8888
                 },
             ) ?: throw IllegalStateException("Unable to decode image crop")
@@ -249,7 +259,9 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
         plan: CropRenderPlan,
     ): Bitmap {
         val sample = cropSampleSize(plan.sourceToOutput)
-        val orientedBounds = plan.visibleSourceBounds.expanded(metadata.orientedSize, 1)
+        val orientedBounds = plan.visibleSourceBounds.expanded(metadata.orientedSize, sample)
+        // Crop coordinates follow the post-target normalized image. This bounds the returned
+        // bitmap allocation; ImageDecoder's internal peak decode strategy remains platform-owned.
         val targetFullWidth = ceilDiv(metadata.orientedSize.width, sample)
         val targetFullHeight = ceilDiv(metadata.orientedSize.height, sample)
         val targetCrop = Rect(
@@ -334,6 +346,7 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
         orientedBounds: PixelRect,
         orientedToRaw: AffineTransform,
         rawSize: ImageSize,
+        halo: Int,
     ): PixelRect {
         val corners = listOf(
             orientedToRaw.map(orientedBounds.left.toDouble(), orientedBounds.top.toDouble()),
@@ -342,10 +355,18 @@ class AndroidPlatformImageCodec : PlatformImageCodec {
             orientedToRaw.map(orientedBounds.right.toDouble(), orientedBounds.bottom.toDouble()),
         )
         return PixelRect(
-            left = (floor(corners.minOf { it.x }).toInt() - 1).coerceAtLeast(0),
-            top = (floor(corners.minOf { it.y }).toInt() - 1).coerceAtLeast(0),
-            right = (ceil(corners.maxOf { it.x }).toInt() + 1).coerceAtMost(rawSize.width),
-            bottom = (ceil(corners.maxOf { it.y }).toInt() + 1).coerceAtMost(rawSize.height),
+            left = (floor(corners.minOf { it.x }).toLong() - halo)
+                .coerceAtLeast(0L)
+                .toInt(),
+            top = (floor(corners.minOf { it.y }).toLong() - halo)
+                .coerceAtLeast(0L)
+                .toInt(),
+            right = (ceil(corners.maxOf { it.x }).toLong() + halo)
+                .coerceAtMost(rawSize.width.toLong())
+                .toInt(),
+            bottom = (ceil(corners.maxOf { it.y }).toLong() + halo)
+                .coerceAtMost(rawSize.height.toLong())
+                .toInt(),
         )
     }
 
@@ -433,19 +454,31 @@ internal fun calculatePreviewSampleSize(
     target: ImageSize,
     request: DecodeRequest,
 ): Int {
-    var sample = 1
-    while (true) {
+    fun sizeAt(sample: Int): ImageSize {
         val sampledRawWidth = ceilDiv(rawSize.width, sample)
         val sampledRawHeight = ceilDiv(rawSize.height, sample)
-        val sampledWidth = if (orientation.swapsDimensions()) sampledRawHeight else sampledRawWidth
-        val sampledHeight = if (orientation.swapsDimensions()) sampledRawWidth else sampledRawHeight
-        val withinPixels = sampledWidth.toLong() * sampledHeight <= request.maxPixels
-        val withinTargetDimension = maxOf(sampledWidth, sampledHeight) <=
-                maxOf(target.width, target.height)
-        if (withinPixels && withinTargetDimension) return sample
+        return if (orientation.swapsDimensions()) {
+            ImageSize(sampledRawHeight, sampledRawWidth)
+        } else {
+            ImageSize(sampledRawWidth, sampledRawHeight)
+        }
+    }
+
+    var sample = 1
+    var sampledSize = sizeAt(sample)
+    while (sampledSize.width.toLong() * sampledSize.height > request.maxPixels) {
         check(sample <= Int.MAX_VALUE / 2) { "Unable to calculate a bounded sample size" }
         sample *= 2
+        sampledSize = sizeAt(sample)
     }
+
+    while (sample <= Int.MAX_VALUE / 2) {
+        val nextSample = sample * 2
+        val nextSize = sizeAt(nextSample)
+        if (nextSize.width < target.width || nextSize.height < target.height) break
+        sample = nextSample
+    }
+    return sample
 }
 
 private fun cropSampleSize(transform: AffineTransform): Int {
@@ -465,10 +498,10 @@ private fun ceilDiv(value: Int, divisor: Int): Int =
 private fun PixelRect.toAndroidRect(): Rect = Rect(left, top, right, bottom)
 
 private fun PixelRect.expanded(size: ImageSize, pixels: Int): PixelRect = PixelRect(
-    left = (left - pixels).coerceAtLeast(0),
-    top = (top - pixels).coerceAtLeast(0),
-    right = (right + pixels).coerceAtMost(size.width),
-    bottom = (bottom + pixels).coerceAtMost(size.height),
+    left = (left.toLong() - pixels).coerceAtLeast(0L).toInt(),
+    top = (top.toLong() - pixels).coerceAtLeast(0L).toInt(),
+    right = (right.toLong() + pixels).coerceAtMost(size.width.toLong()).toInt(),
+    bottom = (bottom.toLong() + pixels).coerceAtMost(size.height.toLong()).toInt(),
 )
 
 private fun AffineTransform.compose(right: AffineTransform): AffineTransform = AffineTransform(

@@ -101,7 +101,7 @@ class AndroidPlatformImageCodecTest {
     }
 
     @Test
-    fun previewSampleBoundsIntermediateBitmapToPlannedSize() {
+    fun previewSampleKeepsClosestPowerOfTwoAbovePlannedSize() {
         val source = ImageSize(6_000, 1_000)
         val request = DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L)
         val target = DecodeSizePlanner.plan(source, request)
@@ -118,12 +118,37 @@ class AndroidPlatformImageCodecTest {
         )
 
         assertEquals(ImageSize(2_048, 341), target)
-        assertEquals(4, sample)
-        assertEquals(ImageSize(1_500, 250), sampledSize)
-        assertTrue(
-            maxOf(sampledSize.width, sampledSize.height) <= maxOf(target.width, target.height),
-        )
+        assertEquals(2, sample)
+        assertEquals(ImageSize(3_000, 500), sampledSize)
+        assertTrue(sampledSize.width >= target.width)
+        assertTrue(sampledSize.height >= target.height)
         assertTrue(sampledSize.width.toLong() * sampledSize.height <= request.maxPixels)
+    }
+
+    @Test
+    fun previewSampleDoesNotUndershootTargetForSmallResize() {
+        val source = ImageSize(2_050, 2_050)
+        val request = DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L)
+        val target = DecodeSizePlanner.plan(source, request)
+
+        val sample = calculatePreviewSampleSize(source, orientation = 1, target, request)
+
+        assertEquals(ImageSize(2_048, 2_048), target)
+        assertEquals(1, sample)
+    }
+
+    @Test
+    fun previewScalesLargerIntermediateToPlannedTarget() = runBlocking {
+        val source = ImageSize(6_000, 1_000)
+        val request = DecodeRequest(maxDimension = 2_048, maxPixels = 16_000_000L)
+        val target = DecodeSizePlanner.plan(source, request)
+        val png = createEncodedBitmap(source.width, source.height, Bitmap.CompressFormat.PNG)
+
+        val decoded = codec.decode(png, request).bitmap.asAndroidBitmap()
+
+        assertEquals(target.width, decoded.width)
+        assertEquals(target.height, decoded.height)
+        decoded.recycle()
     }
 
     @Test
@@ -166,6 +191,67 @@ class AndroidPlatformImageCodecTest {
             }
             rendered.recycle()
         }
+    }
+
+    @Test
+    fun exifSixCropRendersPixelsInNormalizedOrientation() = runBlocking {
+        val rawSize = ImageSize(400, 300)
+        val orientedSize = ImageSize(300, 400)
+        val jpeg = createFourColorJpeg(rawSize).withExifOrientation(6)
+        val outputSize = ImageSize(150, 200)
+
+        val rendered = codec.renderCrop(
+            jpeg,
+            CropRenderRequest(orientedSize, CropTransform(), outputSize),
+        ).asAndroidBitmap()
+
+        assertEquals(outputSize.width, rendered.width)
+        assertEquals(outputSize.height, rendered.height)
+        assertColorNear(Color.BLUE, rendered.getPixel(20, 20), tolerance = 35)
+        assertColorNear(Color.RED, rendered.getPixel(129, 20), tolerance = 35)
+        assertColorNear(Color.YELLOW, rendered.getPixel(20, 179), tolerance = 35)
+        assertColorNear(Color.GREEN, rendered.getPixel(129, 179), tolerance = 35)
+        rendered.recycle()
+    }
+
+    @Test
+    fun sampledOddJpegCropKeepsEdgesOpaqueAndAligned() = runBlocking {
+        val sourceSize = ImageSize(803, 603)
+        val outputSize = ImageSize(201, 151)
+        val jpeg = createGradientJpeg(sourceSize)
+        val request = CropRenderRequest(
+            originalSize = sourceSize,
+            transform = CropTransform(zoom = 1.5f),
+            outputSize = outputSize,
+        )
+
+        val rendered = codec.renderCrop(jpeg, request).asAndroidBitmap()
+        val visible = CropRenderPlanner().plan(request).visibleSourceBounds
+        val decodedRegion = requireNotNull(PixelBitmapRegionDecoderShadow.lastRect)
+        val sampleSize = requireNotNull(PixelBitmapRegionDecoderShadow.lastSampleSize)
+        val samples = listOf(
+            0 to 0,
+            outputSize.width / 2 to 0,
+            outputSize.width - 1 to 0,
+            0 to outputSize.height / 2,
+            outputSize.width / 2 to outputSize.height / 2,
+            outputSize.width - 1 to outputSize.height / 2,
+            0 to outputSize.height - 1,
+            outputSize.width / 2 to outputSize.height - 1,
+            outputSize.width - 1 to outputSize.height - 1,
+        )
+
+        samples.forEach { (x, y) ->
+            val actual = rendered.getPixel(x, y)
+            assertEquals(255, Color.alpha(actual), "Expected opaque pixel at $x,$y")
+            assertColorNear(expectedGradientAtOutput(request, x, y), actual, tolerance = 20)
+        }
+        assertEquals(2, sampleSize)
+        assertTrue(decodedRegion.left <= (visible.left - sampleSize).coerceAtLeast(0))
+        assertTrue(decodedRegion.top <= (visible.top - sampleSize).coerceAtLeast(0))
+        assertTrue(decodedRegion.right >= (visible.right + sampleSize).coerceAtMost(sourceSize.width))
+        assertTrue(decodedRegion.bottom >= (visible.bottom + sampleSize).coerceAtMost(sourceSize.height))
+        rendered.recycle()
     }
 
     @Test
@@ -257,11 +343,38 @@ private fun createGradientPng(size: ImageSize): ByteArray = createPng(size) { x,
     gradientColor(x.toDouble(), y.toDouble(), size)
 }
 
+private fun createGradientJpeg(size: ImageSize): ByteArray = createEncodedPixels(
+    size,
+    Bitmap.CompressFormat.JPEG,
+) { x, y ->
+    gradientColor(x.toDouble(), y.toDouble(), size)
+}
+
+private fun createFourColorJpeg(size: ImageSize): ByteArray = createEncodedPixels(
+    size,
+    Bitmap.CompressFormat.JPEG,
+) { x, y ->
+    when {
+        x < size.width / 2 && y < size.height / 2 -> Color.RED
+        x >= size.width / 2 && y < size.height / 2 -> Color.GREEN
+        x < size.width / 2 -> Color.BLUE
+        else -> Color.YELLOW
+    }
+}
+
 private fun createStripedPng(size: ImageSize): ByteArray = createPng(size) { x, _ ->
     if (x / 2 % 2 == 0) Color.BLACK else Color.WHITE
 }
 
 private inline fun createPng(size: ImageSize, colorAt: (Int, Int) -> Int): ByteArray {
+    return createEncodedPixels(size, Bitmap.CompressFormat.PNG, colorAt)
+}
+
+private inline fun createEncodedPixels(
+    size: ImageSize,
+    format: Bitmap.CompressFormat,
+    colorAt: (Int, Int) -> Int,
+): ByteArray {
     val pixels = IntArray(size.width * size.height)
     for (y in 0 until size.height) {
         for (x in 0 until size.width) {
@@ -270,7 +383,7 @@ private inline fun createPng(size: ImageSize, colorAt: (Int, Int) -> Int): ByteA
     }
     val bitmap = Bitmap.createBitmap(pixels, size.width, size.height, Bitmap.Config.ARGB_8888)
     return ByteArrayOutputStream().use { output ->
-        check(bitmap.compress(Bitmap.CompressFormat.PNG, 100, output))
+        check(bitmap.compress(format, 100, output))
         bitmap.recycle()
         output.toByteArray()
     }
@@ -408,6 +521,8 @@ class PixelBitmapRegionDecoderShadow {
 
     @Implementation
     fun decodeRegion(rect: Rect, options: BitmapFactory.Options): Bitmap {
+        lastRect = Rect(rect)
+        lastSampleSize = options.inSampleSize.coerceAtLeast(1)
         val cropped = Bitmap.createBitmap(source, rect.left, rect.top, rect.width(), rect.height())
         val sample = options.inSampleSize.coerceAtLeast(1)
         if (sample == 1) return cropped
@@ -425,6 +540,11 @@ class PixelBitmapRegionDecoderShadow {
     }
 
     companion object {
+        var lastRect: Rect? = null
+            private set
+        var lastSampleSize: Int? = null
+            private set
+
         @JvmStatic
         @Implementation
         fun newInstance(
@@ -433,6 +553,8 @@ class PixelBitmapRegionDecoderShadow {
             length: Int,
             @Suppress("UNUSED_PARAMETER") isShareable: Boolean,
         ): BitmapRegionDecoder {
+            lastRect = null
+            lastSampleSize = null
             val decoder = Shadow.newInstanceOf(BitmapRegionDecoder::class.java)
             Shadow.extract<PixelBitmapRegionDecoderShadow>(decoder).source =
                 BitmapFactory.decodeByteArray(data, offset, length)
