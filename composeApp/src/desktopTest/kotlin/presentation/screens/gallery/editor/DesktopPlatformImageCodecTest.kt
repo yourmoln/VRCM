@@ -16,10 +16,92 @@ import kotlin.math.abs
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertSame
 import kotlin.test.assertTrue
 
 class DesktopPlatformImageCodecTest {
     private val codec = DesktopPlatformImageCodec()
+
+    @Test
+    fun previewStrategyRejectsUnsafeLazyDecodeBeforeRasterization() {
+        val source = ImageSize(4_001, 4_000)
+        val target = DecodeSizePlanner.plan(
+            source,
+            DecodeRequest(maxDimension = 2_048, maxPixels = 4_000_000L),
+        )
+
+        assertEquals(
+            DesktopRasterStrategy.REJECT_UNSAFE_SOURCE,
+            planDesktopPreviewRaster(source, target),
+        )
+    }
+
+    @Test
+    fun previewStrategyUsesStablePathsWithoutDecoderExceptions() {
+        val safeSource = ImageSize(1_600, 1_200)
+
+        assertEquals(
+            DesktopRasterStrategy.DIRECT_CODEC,
+            planDesktopPreviewRaster(safeSource, safeSource),
+        )
+        assertEquals(
+            DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE,
+            planDesktopPreviewRaster(safeSource, ImageSize(800, 600)),
+        )
+    }
+
+    @Test
+    fun cropStrategyRejectsUnsafeLazyDecodeBeforeRasterization() {
+        assertEquals(
+            DesktopRasterStrategy.REJECT_UNSAFE_SOURCE,
+            planDesktopCropRaster(ImageSize(50_000_000, 2)),
+        )
+        assertEquals(
+            DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE,
+            planDesktopCropRaster(ImageSize(4_000, 4_000)),
+        )
+    }
+
+    @Test
+    fun skiaRebaseUsesOneFloatAnchorForMatrixAndDrawTranslation() {
+        val anchorX = 50_000_003.0
+        val anchorY = 1.0
+        val transform = AffineTransform(
+            scaleX = 2_048.0,
+            skewX = 0.0,
+            translateX = -2_048.0 * anchorX + 1_024.0,
+            skewY = 0.0,
+            scaleY = 1_024.0,
+            translateY = -1_024.0 * anchorY + 512.0,
+        )
+
+        val rebased = transform.rebaseForDesktopSkia(anchorX, anchorY)
+        val floatAnchorX = anchorX.toFloat()
+        val floatAnchorY = anchorY.toFloat()
+        val canonicalMapped = transform.map(floatAnchorX.toDouble(), floatAnchorY.toDouble())
+
+        assertEquals(-floatAnchorX, rebased.drawX)
+        assertEquals(-floatAnchorY, rebased.drawY)
+        assertEquals(canonicalMapped.x.toFloat(), rebased.matrix.mat[2])
+        assertEquals(canonicalMapped.y.toFloat(), rebased.matrix.mat[5])
+        assertTrue(
+            transform.map(anchorX, anchorY).x.toFloat() != rebased.matrix.mat[2],
+            "Fixture must expose a Float-anchor error amplified beyond output pixels",
+        )
+    }
+
+    @Test
+    fun fatalErrorsAreNotMappedToRecoverableImageFailures() {
+        DesktopFailureOperation.entries.forEach { operation ->
+            val fatal = AssertionError("fatal-$operation")
+
+            val thrown = assertFailsWith<AssertionError> {
+                mapDesktopImageFailure(operation) { throw fatal }
+            }
+
+            assertSame(fatal, thrown)
+        }
+    }
 
     @Test
     fun pngRoundTripPreservesDimensions() = runBlocking {

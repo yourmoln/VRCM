@@ -5,6 +5,8 @@ import androidx.compose.ui.graphics.asComposeImageBitmap
 import androidx.compose.ui.graphics.asSkiaBitmap
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import org.jetbrains.skia.Bitmap
 import org.jetbrains.skia.Codec
@@ -31,48 +33,53 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
         withContext(Dispatchers.Default) {
             require(request.maxDimension > 0) { "maxDimension must be positive" }
             require(request.maxPixels > 0) { "maxPixels must be positive" }
-            try {
-                withCodec(bytes) { codec, metadata ->
+            mapDesktopImageFailure(DesktopFailureOperation.DECODE) {
+                val coroutineContext = currentCoroutineContext().also { it.ensureActive() }
+                val result = withCodec(bytes) { codec, metadata ->
                     val target = DecodeSizePlanner.plan(metadata.orientedSize, request)
-                    val rawTarget = if (metadata.origin.swapsWidthHeight()) {
-                        ImageSize(target.height, target.width)
-                    } else {
-                        target
-                    }
-                    Bitmap().use { decoded ->
-                        check(
-                            decoded.allocPixels(
-                                ImageInfo.makeN32Premul(rawTarget.width, rawTarget.height),
-                            ),
-                        ) { "Unable to allocate bounded preview bitmap" }
-                        val bitmap = try {
-                            codec.readPixels(decoded)
-                            orientPreview(decoded, metadata.origin, target)
-                        } catch (cause: IllegalArgumentException) {
-                            if (!cause.isUnsupportedCodecScale()) throw cause
-                            renderEncodedPreview(bytes, metadata, target)
+                    coroutineContext.ensureActive()
+                    val bitmap = when (
+                        planDesktopPreviewRaster(metadata.orientedSize, target)
+                    ) {
+                        DesktopRasterStrategy.DIRECT_CODEC -> {
+                            val rawTarget = if (metadata.origin.swapsWidthHeight()) {
+                                ImageSize(target.height, target.width)
+                            } else {
+                                target
+                            }
+                            Bitmap().use { decoded ->
+                                check(
+                                    decoded.allocPixels(
+                                        ImageInfo.makeN32Premul(rawTarget.width, rawTarget.height),
+                                    ),
+                                ) { "Unable to allocate bounded preview bitmap" }
+                                codec.readPixels(decoded)
+                                orientPreview(decoded, metadata.origin, target)
+                            }
                         }
-                        DecodedImage(
-                            bitmap = bitmap,
-                            originalSize = metadata.orientedSize,
-                        )
+                        DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE ->
+                            renderEncodedPreview(bytes, metadata, target)
+                        DesktopRasterStrategy.REJECT_UNSAFE_SOURCE ->
+                            throw PrintImageFailure.DecodeFailed(
+                                unsafeDesktopRasterCause(metadata.orientedSize),
+                            )
                     }
+                    DecodedImage(
+                        bitmap = bitmap,
+                        originalSize = metadata.orientedSize,
+                    )
                 }
-            } catch (cause: CancellationException) {
-                throw cause
-            } catch (failure: PrintImageFailure) {
-                throw failure
-            } catch (cause: IllegalArgumentException) {
-                throw PrintImageFailure.UnsupportedFormat(cause)
-            } catch (cause: Throwable) {
-                throw PrintImageFailure.DecodeFailed(cause)
+                currentCoroutineContext().ensureActive()
+                result
             }
         }
 
     suspend fun renderCrop(bytes: ByteArray, request: CropRenderRequest): ImageBitmap =
         withContext(Dispatchers.Default) {
-            try {
+            mapDesktopImageFailure(DesktopFailureOperation.RENDER) {
+                currentCoroutineContext().ensureActive()
                 val metadata = withCodec(bytes) { _, metadata -> metadata }
+                currentCoroutineContext().ensureActive()
                 if (metadata.orientedSize != request.originalSize) {
                     throw PrintImageFailure.RenderFailed(
                         IllegalArgumentException(
@@ -81,31 +88,31 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
                         ),
                     )
                 }
+                if (planDesktopCropRaster(metadata.orientedSize) ==
+                    DesktopRasterStrategy.REJECT_UNSAFE_SOURCE
+                ) {
+                    throw PrintImageFailure.RenderFailed(
+                        unsafeDesktopRasterCause(metadata.orientedSize),
+                    )
+                }
                 val plan = CropRenderPlanner().plan(request)
-                renderEncodedCrop(bytes, metadata, plan)
-            } catch (cause: CancellationException) {
-                throw cause
-            } catch (failure: PrintImageFailure) {
-                throw failure
-            } catch (cause: Throwable) {
-                throw PrintImageFailure.RenderFailed(cause)
+                renderEncodedCrop(bytes, metadata, plan).also {
+                    currentCoroutineContext().ensureActive()
+                }
             }
         }
 
     override suspend fun encodePng(bitmap: ImageBitmap): ByteArray =
         withContext(Dispatchers.Default) {
-            try {
-                Image.makeFromBitmap(bitmap.asSkiaBitmap()).use { image ->
+            mapDesktopImageFailure(DesktopFailureOperation.ENCODE) {
+                currentCoroutineContext().ensureActive()
+                val result = Image.makeFromBitmap(bitmap.asSkiaBitmap()).use { image ->
                     requireNotNull(image.encodeToData(EncodedImageFormat.PNG, 100)).use { data ->
                         data.bytes
                     }
                 }
-            } catch (cause: CancellationException) {
-                throw cause
-            } catch (failure: PrintImageFailure) {
-                throw failure
-            } catch (cause: Throwable) {
-                throw PrintImageFailure.EncodeFailed(cause)
+                currentCoroutineContext().ensureActive()
+                result
             }
         }
 
@@ -162,10 +169,10 @@ class DesktopPlatformImageCodec : PlatformImageCodec {
                 .coerceIn(0.0, metadata.orientedSize.width.toDouble())
             val anchorY = ((visible.top.toDouble() + visible.bottom) / 2.0)
                 .coerceIn(0.0, metadata.orientedSize.height.toDouble())
-            val localToOutput = plan.sourceToOutput.rebase(anchorX, anchorY)
+            val localToOutput = plan.sourceToOutput.rebaseForDesktopSkia(anchorX, anchorY)
 
-            surface.canvas.concat(localToOutput.toSkiaMatrix())
-            surface.canvas.drawImage(image, -anchorX.toFloat(), -anchorY.toFloat())
+            surface.canvas.concat(localToOutput.matrix)
+            surface.canvas.drawImage(image, localToOutput.drawX, localToOutput.drawY)
         }
         surface.makeImageSnapshot().use { snapshot ->
             snapshot.toOwnedComposeImageBitmap()
@@ -272,10 +279,30 @@ private fun EncodedOrigin.toOrientedAffine(orientedSize: ImageSize): AffineTrans
     EncodedOrigin.UNUSED -> throw PrintImageFailure.UnsupportedFormat()
 }
 
-private fun AffineTransform.rebase(anchorX: Double, anchorY: Double): AffineTransform = copy(
-    translateX = scaleX * anchorX + skewX * anchorY + translateX,
-    translateY = skewY * anchorX + scaleY * anchorY + translateY,
+internal data class DesktopSkiaRebase(
+    val matrix: Matrix33,
+    val drawX: Float,
+    val drawY: Float,
 )
+
+internal fun AffineTransform.rebaseForDesktopSkia(
+    anchorX: Double,
+    anchorY: Double,
+): DesktopSkiaRebase {
+    val floatAnchorX = anchorX.toFloat()
+    val floatAnchorY = anchorY.toFloat()
+    val canonicalAnchorX = floatAnchorX.toDouble()
+    val canonicalAnchorY = floatAnchorY.toDouble()
+    val rebased = copy(
+        translateX = scaleX * canonicalAnchorX + skewX * canonicalAnchorY + translateX,
+        translateY = skewY * canonicalAnchorX + scaleY * canonicalAnchorY + translateY,
+    )
+    return DesktopSkiaRebase(
+        matrix = rebased.toSkiaMatrix(),
+        drawX = -floatAnchorX,
+        drawY = -floatAnchorY,
+    )
+}
 
 private fun AffineTransform.toSkiaMatrix(): Matrix33 = Matrix33(
     scaleX.toFloat(),
@@ -289,9 +316,61 @@ private fun AffineTransform.toSkiaMatrix(): Matrix33 = Matrix33(
     1f,
 )
 
-private fun IllegalArgumentException.isUnsupportedCodecScale(): Boolean =
-    message?.startsWith("Invalid scale:") == true
-
 // The returned ImageBitmap owns this Bitmap; every temporary Skia object remains caller-closed.
 private fun Image.toOwnedComposeImageBitmap(): ImageBitmap =
     Bitmap.makeFromImage(this).asComposeImageBitmap()
+
+internal enum class DesktopRasterStrategy {
+    DIRECT_CODEC,
+    BOUNDED_ENCODED_IMAGE,
+    REJECT_UNSAFE_SOURCE,
+}
+
+internal fun planDesktopPreviewRaster(
+    source: ImageSize,
+    target: ImageSize,
+): DesktopRasterStrategy = when {
+    source == target -> DesktopRasterStrategy.DIRECT_CODEC
+    source.pixelCount() <= PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS ->
+        DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE
+    else -> DesktopRasterStrategy.REJECT_UNSAFE_SOURCE
+}
+
+internal fun planDesktopCropRaster(source: ImageSize): DesktopRasterStrategy =
+    if (source.pixelCount() <= PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS) {
+        DesktopRasterStrategy.BOUNDED_ENCODED_IMAGE
+    } else {
+        DesktopRasterStrategy.REJECT_UNSAFE_SOURCE
+    }
+
+private fun ImageSize.pixelCount(): Long = width.toLong() * height
+
+private fun unsafeDesktopRasterCause(source: ImageSize): IllegalStateException =
+    IllegalStateException(
+        "Desktop Skia cannot safely rasterize ${source.width}x${source.height}; " +
+                "the source exceeds the ${PrintImageLimits.MAX_INTERMEDIATE_DECODE_PIXELS}-pixel " +
+                "full-raster limit and this Skiko version has no region decode API",
+    )
+
+internal enum class DesktopFailureOperation {
+    DECODE,
+    RENDER,
+    ENCODE,
+}
+
+internal inline fun <T> mapDesktopImageFailure(
+    operation: DesktopFailureOperation,
+    block: () -> T,
+): T = try {
+    block()
+} catch (cause: CancellationException) {
+    throw cause
+} catch (failure: PrintImageFailure) {
+    throw failure
+} catch (cause: Exception) {
+    throw when (operation) {
+        DesktopFailureOperation.DECODE -> PrintImageFailure.DecodeFailed(cause)
+        DesktopFailureOperation.RENDER -> PrintImageFailure.RenderFailed(cause)
+        DesktopFailureOperation.ENCODE -> PrintImageFailure.EncodeFailed(cause)
+    }
+}
