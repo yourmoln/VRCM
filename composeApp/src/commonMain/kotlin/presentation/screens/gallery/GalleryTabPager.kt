@@ -2,12 +2,18 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery
 
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.ExperimentalSharedTransitionApi
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -24,8 +30,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import cafe.adriel.voyager.koin.koinScreenModel
@@ -190,31 +198,53 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                 }
             }
 
-            // 所有类型都有上传按钮；非 VRC+ 用户显示为灰色不可点击
+            // 选中时为红色删除按钮，否则为上传按钮
+            val hasSelection = galleryScreenModel.hasSelection
             FloatingActionButton(
                 onClick = {
-                    if (!isPreparing && isVrcPlus) {
+                    if (hasSelection) {
+                        // 删除选中项
+                        if (isPrint) {
+                            galleryScreenModel.deleteSelectedPrints(
+                                deletingMessage = locale.galleryTabDeleting,
+                                successMessage = locale.galleryTabDeleteSuccess,
+                                failedMessagePrefix = locale.galleryTabDeleteFailed,
+                            )
+                        } else {
+                            galleryScreenModel.deleteSelectedFiles(
+                                tagType = tagType,
+                                deletingMessage = locale.galleryTabDeleting,
+                                successMessage = locale.galleryTabDeleteSuccess,
+                                failedMessagePrefix = locale.galleryTabDeleteFailed,
+                            )
+                        }
+                    } else if (!isPreparing && isVrcPlus) {
                         if (isPrint) printImagePicker.launch() else simpleImagePicker.launch()
                     }
                 },
                 modifier = Modifier
                     .align(Alignment.BottomEnd)
                     .padding(16.dp),
-                containerColor = if (isVrcPlus) {
-                    MaterialTheme.colorScheme.primaryContainer
-                } else {
-                    MaterialTheme.colorScheme.surfaceVariant
+                containerColor = when {
+                    hasSelection -> MaterialTheme.colorScheme.error
+                    isVrcPlus -> MaterialTheme.colorScheme.primaryContainer
+                    else -> MaterialTheme.colorScheme.surfaceVariant
                 },
-                contentColor = if (isVrcPlus) {
-                    MaterialTheme.colorScheme.onPrimaryContainer
-                } else {
-                    MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
+                contentColor = when {
+                    hasSelection -> MaterialTheme.colorScheme.onError
+                    isVrcPlus -> MaterialTheme.colorScheme.onPrimaryContainer
+                    else -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.38f)
                 },
             ) {
                 if (isPreparing) {
                     CircularProgressIndicator(
                         modifier = Modifier.size(24.dp),
                         strokeWidth = 2.dp,
+                    )
+                } else if (hasSelection) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = locale.galleryTabDelete,
                     )
                 } else {
                     Icon(
@@ -271,10 +301,13 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         }
     }
 
+    @OptIn(ExperimentalFoundationApi::class)
     @Composable
     private fun PrintItem(print: PrintData) {
+        val galleryScreenModel: GalleryScreenModel = koinScreenModel()
         val imageUrl = print.files?.image ?: ""
         val (dialogContent, setDialogContent) = LocationDialogContent.current
+        val selected = galleryScreenModel.isSelected(print.id)
 
         Box(
             modifier = Modifier
@@ -292,9 +325,16 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(MaterialTheme.shapes.medium)
-                        .clickable {
-                            setDialogContent(ImagePreviewDialog(print.id, print.id, ".png", imageUrl))
-                        },
+                        .combinedClickable(
+                            onClick = {
+                                if (galleryScreenModel.hasSelection) {
+                                    galleryScreenModel.toggleSelection(print.id)
+                                } else {
+                                    setDialogContent(ImagePreviewDialog(print.id, print.id, ".png", imageUrl))
+                                }
+                            },
+                            onLongClick = { galleryScreenModel.toggleSelection(print.id) },
+                        ),
                     loading = {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
@@ -317,6 +357,23 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                         }
                     }
                 )
+            }
+            // 选中状态覆盖层
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f))
+                        .clickable { galleryScreenModel.toggleSelection(print.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
             }
         }
     }
@@ -356,7 +413,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         }
     }
 
-    @OptIn(ExperimentalSharedTransitionApi::class)
+    @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalFoundationApi::class)
     @Composable
     private fun GalleryItem(
         file: FileData,
@@ -364,9 +421,9 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
         aspectRatio: Float = 1f,
         shape: Shape = MaterialTheme.shapes.medium
     ) {
+        val galleryScreenModel: GalleryScreenModel = koinScreenModel()
         val (dialogContent, setDialogContent) = LocationDialogContent.current
-
-
+        val selected = galleryScreenModel.isSelected(file.id)
 
         Box(
             modifier = Modifier
@@ -396,10 +453,16 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                             sharedTransitionScope = LocalSharedTransitionDialogScope.current,
                             animatedVisibilityScope = this@AnimatedVisibility
                         )
-                        .clickable {
-                            // 点击图片时，打开全屏预览
-                            setDialogContent(ImagePreviewDialog(file.id, file.name, file.extension))
-                        },
+                        .combinedClickable(
+                            onClick = {
+                                if (galleryScreenModel.hasSelection) {
+                                    galleryScreenModel.toggleSelection(file.id)
+                                } else {
+                                    setDialogContent(ImagePreviewDialog(file.id, file.name, file.extension))
+                                }
+                            },
+                            onLongClick = { galleryScreenModel.toggleSelection(file.id) },
+                        ),
                     loading = {
                         Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator(
@@ -423,9 +486,25 @@ sealed class GalleryTabPager(private val tagType: FileTagType) : Pager {
                     }
                 )
             }
-
+            // 选中状态覆盖层
+            if (selected) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.3f))
+                        .clip(shape)
+                        .clickable { galleryScreenModel.toggleSelection(file.id) },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(36.dp),
+                    )
+                }
+            }
         }
-
     }
 
     companion object {

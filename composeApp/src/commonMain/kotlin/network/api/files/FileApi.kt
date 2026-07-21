@@ -131,5 +131,11 @@ class FileApi(private val client: HttpClient) {
     suspend fun getFileInfo(fileId: String): Result<FileResponse> = runCatching {
         client.get("$FILES_API_PREFIX/$fileId").checkSuccess<FileResponse>()
     }
-
+    /**
+     * 删除指定文件
+     * @param fileId 文件ID
+     */
+    suspend fun deleteFile(fileId: String) {
+        client.delete("$FILE_API_PREFIX/$fileId").checkSuccess<Unit>()
+    }
 }

@@ -2,6 +2,7 @@ package io.github.vrcmteam.vrcm.presentation.screens.gallery
 
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableStateSetOf
 import cafe.adriel.voyager.core.model.ScreenModel
 import cafe.adriel.voyager.core.model.screenModelScope
 import io.github.vrcmteam.vrcm.AppPlatform
@@ -59,6 +60,21 @@ class GalleryScreenModel(
     // 是否为 VRC+ 用户
     private val _isVrcPlus = mutableStateOf(false)
     val isVrcPlus: Boolean get() = _isVrcPlus.value
+
+    // 选中的文件 ID 集合
+    private val _selectedIds = mutableStateSetOf<String>()
+    val selectedIds: Set<String> get() = _selectedIds
+    val hasSelection: Boolean get() = _selectedIds.isNotEmpty()
+
+    fun toggleSelection(id: String) {
+        if (_selectedIds.contains(id)) _selectedIds.remove(id) else _selectedIds.add(id)
+    }
+
+    fun clearSelection() {
+        _selectedIds.clear()
+    }
+
+    fun isSelected(id: String): Boolean = _selectedIds.contains(id)
 
     fun init() {
         refreshAllFiles()
@@ -232,6 +248,72 @@ class GalleryScreenModel(
                 )
                 logger.error("Upload failed: ${it.message}")
             }
+        }
+    }
+
+    /**
+     * 删除选中的文件（非 Print 类型）
+     * @param tagType 文件标签类型
+     * @param deletingMessage 删除中提示
+     * @param successMessage 删除成功提示
+     * @param failedMessagePrefix 删除失败提示前缀
+     */
+    fun deleteSelectedFiles(
+        tagType: FileTagType,
+        deletingMessage: String,
+        successMessage: String,
+        failedMessagePrefix: String,
+    ) {
+        val ids = _selectedIds.toList()
+        if (ids.isEmpty()) return
+        _selectedIds.clear()
+        screenModelScope.launch(Dispatchers.IO) {
+            SharedFlowCentre.toastText.emit(ToastText.Info(deletingMessage))
+            var failed = 0
+            for (id in ids) {
+                runCatching { fileApi.deleteFile(id) }
+                    .onFailure { failed++; logger.error("Delete file $id failed: $it") }
+            }
+            if (failed == 0) {
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
+            } else {
+                SharedFlowCentre.toastText.emit(
+                    ToastText.Error("$failedMessagePrefix ($failed/${ids.size})")
+                )
+            }
+            refreshFiles(tagType)
+        }
+    }
+
+    /**
+     * 删除选中的拍立得
+     * @param deletingMessage 删除中提示
+     * @param successMessage 删除成功提示
+     * @param failedMessagePrefix 删除失败提示前缀
+     */
+    fun deleteSelectedPrints(
+        deletingMessage: String,
+        successMessage: String,
+        failedMessagePrefix: String,
+    ) {
+        val ids = _selectedIds.toList()
+        if (ids.isEmpty()) return
+        _selectedIds.clear()
+        screenModelScope.launch(Dispatchers.IO) {
+            SharedFlowCentre.toastText.emit(ToastText.Info(deletingMessage))
+            var failed = 0
+            for (id in ids) {
+                runCatching { printsApi.deletePrint(id) }
+                    .onFailure { failed++; logger.error("Delete print $id failed: $it") }
+            }
+            if (failed == 0) {
+                SharedFlowCentre.toastText.emit(ToastText.Success(successMessage))
+            } else {
+                SharedFlowCentre.toastText.emit(
+                    ToastText.Error("$failedMessagePrefix ($failed/${ids.size})")
+                )
+            }
+            refreshPrints()
         }
     }
 

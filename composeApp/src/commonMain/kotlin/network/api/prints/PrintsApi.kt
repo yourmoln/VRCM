@@ -51,6 +51,14 @@ class PrintsApi(private val client: HttpClient) {
         ).checkSuccess()
     }
 
+    /**
+     * 删除指定拍立得
+     * @param printId 拍立得ID
+     */
+    suspend fun deletePrint(printId: String) {
+        client.delete("$PRINTS_API_PREFIX/$printId").checkSuccess<Unit>()
+    }
+
     private fun ByteArray.hasPngSignature(): Boolean = size >= PNG_SIGNATURE.size &&
             PNG_SIGNATURE.indices.all { index -> this[index] == PNG_SIGNATURE[index] }
 

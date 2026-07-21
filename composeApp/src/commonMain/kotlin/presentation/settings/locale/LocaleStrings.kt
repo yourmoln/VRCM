@@ -160,6 +160,10 @@ data class LocaleStrings(
     val galleryTabUploadFailed: String = "Image upload failed",
     val galleryTabLoadFailed: String = "Loading Failed",
     val galleryTabVrcPlusRequired: String = "Requires VRC+",
+    val galleryTabDelete: String = "Delete",
+    val galleryTabDeleting: String = "Deleting...",
+    val galleryTabDeleteSuccess: String = "Deleted successfully",
+    val galleryTabDeleteFailed: String = "Delete failed",
     // Print image editor
     val printEditorTitle: String = "Edit Print",
     val printEditorBack: String = "Back",

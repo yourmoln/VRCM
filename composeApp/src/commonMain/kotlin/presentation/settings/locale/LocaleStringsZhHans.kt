@@ -155,6 +155,10 @@ internal val LocaleStringsZhHans = LocaleStrings(
     galleryTabUploadFailed = "图片上传失败",
     galleryTabLoadFailed = "加载失败",
     galleryTabVrcPlusRequired = "需要 VRC+",
+    galleryTabDelete = "删除",
+    galleryTabDeleting = "正在删除...",
+    galleryTabDeleteSuccess = "删除成功",
+    galleryTabDeleteFailed = "删除失败",
     // Print image editor
     printEditorTitle = "编辑拍立得",
     printEditorBack = "返回",
