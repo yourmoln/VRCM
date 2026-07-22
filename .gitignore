@@ -4,12 +4,15 @@
 xcuserdata
 !src/**/build/
 local.properties
+*.jks
+*.keystore
 .idea
 .kotlin
 .DS_Store
 captures
 .externalNativeBuild
 .cxx
+.worktrees/
 *.xcodeproj/*
 !*.xcodeproj/project.pbxproj
 !*.xcodeproj/xcshareddata/

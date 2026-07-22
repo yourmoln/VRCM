@@ -44,6 +44,7 @@ import io.github.vrcmteam.vrcm.presentation.screens.home.data.FriendLocation
 import io.github.vrcmteam.vrcm.presentation.screens.group.GroupProfileScreen
 import io.github.vrcmteam.vrcm.presentation.screens.group.data.GroupProfileVo
 import io.github.vrcmteam.vrcm.presentation.screens.user.data.UserProfileVo
+import io.github.vrcmteam.vrcm.presentation.screens.world.RecentWorldsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.FriendNetworkScreen
 import io.github.vrcmteam.vrcm.presentation.screens.user.MutualFriendsScreen
 import io.github.vrcmteam.vrcm.presentation.screens.world.WorldProfileScreen
@@ -86,6 +87,7 @@ data class UserProfileScreen(
 
         val currentUser = userProfileScreenModel.userState
         val userGroups = userProfileScreenModel.userGroups
+        val mutualGroups = userProfileScreenModel.mutualGroups
         var bottomSheetIsVisible by remember { mutableStateOf(false) }
         val sheetState = rememberModalBottomSheetState()
         var openAlertDialog by remember { mutableStateOf(false) }
@@ -105,6 +107,7 @@ data class UserProfileScreen(
                     currentUser = currentUser,
                     friendLocation = userProfileScreenModel.friendLocation,
                     userGroups = userGroups,
+                    mutualGroups = mutualGroups,
                     createdWorlds = userProfileScreenModel.createdWorlds,
                     createdAvatars = userProfileScreenModel.createdAvatars,
                     favoritedWorlds = userProfileScreenModel.favoritedWorlds,
@@ -212,6 +215,13 @@ private fun ColumnScope.SheetItems(
             }
         })
 
+        SheetButtonItem(text = localeStrings.recentWorldsTitle, onClick = {
+            scope.launch { hideSheet() }.invokeOnCompletion {
+                onHideCompletion()
+                navigator.push(RecentWorldsScreen)
+            }
+        })
+
     }
 
     // 管理好友收藏分组，仅当不是自己且是好友时显示
@@ -228,6 +238,28 @@ private fun ColumnScope.SheetItems(
                 openEditNoteDialog()
             }
         })
+
+        if (currentUser.isFriend) {
+            SheetButtonItem(text = localeStrings.profileBoop, onClick = {
+                scope.launch { hideSheet() }.invokeOnCompletion {
+                    onHideCompletion()
+                    userProfileScreenModel.boop(
+                        userId = currentUser.id,
+                        successMessage = localeStrings.profileBoopSuccess,
+                    )
+                }
+            })
+            SheetButtonItem(text = localeStrings.profileInviteToMyInstance, onClick = {
+                scope.launch { hideSheet() }.invokeOnCompletion {
+                    onHideCompletion()
+                    userProfileScreenModel.inviteToMyInstance(
+                        userId = currentUser.id,
+                        successMessage = localeStrings.profileInviteSent,
+                        notInInstanceMessage = localeStrings.profileInviteNotInInstance,
+                    )
+                }
+            })
+        }
     }
 
     SheetButtonItem(
@@ -381,6 +413,7 @@ private fun ColumnScope.ProfileContent(
     currentUser: UserProfileVo?,
     friendLocation: FriendLocation?,
     userGroups: List<LimitedUserGroup>,
+    mutualGroups: List<LimitedUserGroup>,
     createdWorlds: List<WorldData>,
     createdAvatars: List<AvatarData>,
     favoritedWorlds: List<Pair<String, List<FavoritedWorld>>>,
@@ -456,6 +489,26 @@ private fun ColumnScope.ProfileContent(
         userProfileVO = currentUser
     )
 
+    if (!currentUser.isSelf) {
+        UserGroupsSection(
+            groups = mutualGroups,
+            title = strings.userMutualGroups,
+            onGroupClick = { group ->
+                navigator push GroupProfileScreen(
+                    groupProfileVo = GroupProfileVo(
+                        groupId = group.groupId,
+                        name = group.name,
+                        shortCode = group.shortCode,
+                        iconUrl = group.iconUrl,
+                        bannerUrl = group.bannerUrl,
+                        memberCount = group.memberCount,
+                    ),
+                    sharedSuffixKey = sharedSuffixKey
+                )
+            }
+        )
+    }
+
     UserGroupsSection(
         groups = userGroups,
         onGroupClick = { group ->
@@ -509,6 +562,7 @@ private fun ColumnScope.ProfileContent(
 @Composable
 private fun UserGroupsSection(
     groups: List<LimitedUserGroup>,
+    title: String = strings.groups,
     onGroupClick: (LimitedUserGroup) -> Unit,
 ) {
     if (groups.isEmpty()) return
@@ -517,7 +571,7 @@ private fun UserGroupsSection(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = strings.groups,
+            text = title,
             style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.primary
         )
