@@ -291,7 +291,7 @@ sealed class GalleryTabPager(private val tagType: FileTagType) {
         }
     }
 
-    @OptIn(ExperimentalFoundationApi::class)
+    @OptIn(ExperimentalFoundationApi::class, ExperimentalSharedTransitionApi::class)
     @Composable
     private fun PrintItem(
         print: PrintData,
@@ -317,6 +317,11 @@ sealed class GalleryTabPager(private val tagType: FileTagType) {
                     modifier = Modifier
                         .fillMaxSize()
                         .clip(MaterialTheme.shapes.medium)
+                        .sharedBoundsBy(
+                            print.id,
+                            sharedTransitionScope = LocalSharedTransitionDialogScope.current,
+                            animatedVisibilityScope = this@AnimatedVisibility,
+                        )
                         .combinedClickable(
                             onClick = {
                                 if (galleryScreenModel.hasSelection(FileTagType.Print)) {
